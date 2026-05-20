@@ -2,13 +2,19 @@
 @{ ViewData["Title"] = "Data Input Formats"; ViewBag.Highways = null; }
 @{
     var tabDefs = new[]{
-        ("physical","Physical Sensors","text-primary"),
-        ("satellite","Satellite / GPS","text-success"),
-        ("telecom","Telecom / V2X","text-warning"),
-        ("tracker","Tag Trackers","text-purple"),
+        ("physical",  "Physical Sensors", "text-primary"),
+        ("satellite", "Satellite / GPS",  "text-success"),
+        ("telecom",   "Telecom / V2X",    "text-warning"),
+        ("tracker",   "Tag Trackers",     "text-purple"),
     };
-    var allConfigs = Model.PhysicalConfigs.Concat(Model.SatelliteConfigs).Concat(Model.TelecomConfigs).Concat(Model.TrackerConfigs).ToList();
+    var allConfigs  = Model.PhysicalConfigs.Concat(Model.SatelliteConfigs).Concat(Model.TelecomConfigs).Concat(Model.TrackerConfigs).ToList();
     var commonFields = new[]{"vehicle_id","timestamp","speed_mph","latitude","longitude","direction","lane","vehicle_type","event_type","zone_id","highway_id","signal_strength","altitude_ft","heading"};
+    var shown = Model.ActiveTab switch {
+        "satellite" => Model.SatelliteConfigs,
+        "telecom"   => Model.TelecomConfigs,
+        "tracker"   => Model.TrackerConfigs,
+        _           => Model.PhysicalConfigs
+    };
 }
 
 <div class="mss-page-header">
@@ -28,22 +34,12 @@
 }
 </ul>
 
-@{
-    var shown = Model.ActiveTab switch {
-        "satellite" => Model.SatelliteConfigs,
-        "telecom"   => Model.TelecomConfigs,
-        "tracker"   => Model.TrackerConfigs,
-        _           => Model.PhysicalConfigs
-    };
-    var tabClr = tabDefs.First(t => t.Item1 == Model.ActiveTab).Item3;
-}
-
 <div class="row g-3 mb-4">
 @foreach (var c in shown)
 {
     var fields = c.EnabledFieldsRaw?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
     <div class="col-md-6 col-xl-4">
-        <div class="mss-card">
+        <div class="mss-card" id="card_@c.Id">
             <div class="mss-card-body">
                 <div class="fw-bold small mb-1">@c.FormatName</div>
                 <div class="font-monospace text-muted mb-1" style="font-size:.62rem">@c.SourceId</div>
@@ -57,13 +53,9 @@
                     { <span class="badge bg-secondary font-monospace" style="font-size:.6rem">+@(fields.Length-4)</span> }
                 </div>
                 <div class="d-flex gap-2 mt-3">
-                    <form method="post" asp-action="GeneratePayload" class="flex-fill">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="configId" value="@c.Id" />
-                        <button type="submit" class="btn btn-outline-success btn-sm w-100">
-                            <i class="bi bi-play me-1"></i>Generate Payload
-                        </button>
-                    </form>
+                    <button type="button" class="btn btn-outline-success btn-sm flex-fill" onclick="generateAjax(@c.Id, this)">
+                        <i class="bi bi-play me-1"></i>Generate Payload
+                    </button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="openEditFmt(@c.Id)" data-bs-toggle="modal" data-bs-target="#fmtModal">
                         <i class="bi bi-pencil"></i>
                     </button>
@@ -73,6 +65,16 @@
                         <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
                     </form>
                 </div>
+            </div>
+            <div class="mss-payload-preview" id="preview_@c.Id">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small fw-semibold text-success"><i class="bi bi-check-circle me-1"></i><span id="previewLabel_@c.Id"></span></span>
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyPayloadInline(@c.Id)"><i class="bi bi-clipboard"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="closePreview(@c.Id)"><i class="bi bi-x"></i></button>
+                    </div>
+                </div>
+                <pre class="mss-payload-code mb-0" id="previewCode_@c.Id" style="max-height:180px;overflow-y:auto;font-size:.65rem"></pre>
             </div>
         </div>
     </div>
@@ -96,7 +98,7 @@
                         <span class="text-muted small ms-2">@p.CreatedDate.ToString("yyyy-MM-dd HH:mm")</span>
                     </div>
                     <div class="d-flex gap-1">
-                        <button class="btn btn-outline-secondary btn-sm" onclick="copyPayload(@p.Id)"><i class="bi bi-clipboard"></i></button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="copySaved(@p.Id)"><i class="bi bi-clipboard"></i></button>
                         <form method="post" asp-action="DeletePayload" asp-route-id="@p.Id" asp-route-activeTab="@Model.ActiveTab" style="display:inline">
                             @Html.AntiForgeryToken()
                             <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
@@ -174,39 +176,87 @@
 @section Scripts {
 <script>
 var fmts = JSON.parse(document.getElementById('fmtData').textContent);
+var antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+// ── AJAX payload generation ────────────────────────────────────────────────
+function generateAjax(configId, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating…';
+
+    fetch('/DataInputFormats/GeneratePayloadAjax', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'RequestVerificationToken': antiForgeryToken
+        },
+        body: 'configId=' + configId + '&__RequestVerificationToken=' + encodeURIComponent(antiForgeryToken)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play me-1"></i>Generate Payload';
+        if (!data.ok) { alert('Error: ' + data.error); return; }
+
+        var preview = document.getElementById('preview_' + configId);
+        var codeEl  = document.getElementById('previewCode_' + configId);
+        var lblEl   = document.getElementById('previewLabel_' + configId);
+        if (codeEl)  codeEl.textContent  = data.payload;
+        if (lblEl)   lblEl.textContent   = data.label;
+        if (preview) preview.classList.add('show');
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play me-1"></i>Generate Payload';
+        console.error('GeneratePayloadAjax failed:', err);
+    });
+}
+
+function copyPayloadInline(id) {
+    var pre = document.getElementById('previewCode_' + id);
+    if (pre) navigator.clipboard.writeText(pre.textContent);
+}
+function closePreview(id) {
+    var el = document.getElementById('preview_' + id);
+    if (el) el.classList.remove('show');
+}
+function copySaved(id) {
+    var pre = document.getElementById('pl_' + id);
+    if (pre) navigator.clipboard.writeText(pre.textContent).then(function(){ alert('Payload copied!'); });
+}
+
+// ── Format modal helpers ───────────────────────────────────────────────────
 function openNew(tab) {
-    document.getElementById('fmtModalTitle').textContent='Add Format Config';
-    document.getElementById('fmtForm').action='/DataInputFormats/Create';
-    document.getElementById('fm_id').value=0;
-    ['fm_name','fm_sid','fm_src','fm_desc'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('fm_type').value=tab;
-    document.querySelectorAll('.fm-field').forEach(cb=>cb.checked=false);
-    document.getElementById('customFields').innerHTML='';
+    document.getElementById('fmtModalTitle').textContent = 'Add Format Config';
+    document.getElementById('fmtForm').action = '/DataInputFormats/Create';
+    document.getElementById('fm_id').value = 0;
+    ['fm_name','fm_sid','fm_src','fm_desc'].forEach(function(id){ document.getElementById(id).value=''; });
+    document.getElementById('fm_type').value = tab;
+    document.querySelectorAll('.fm-field').forEach(function(cb){ cb.checked = false; });
+    document.getElementById('customFields').innerHTML = '';
 }
 function openEditFmt(id) {
-    var c=fmts.find(x=>x.id===id); if(!c) return;
-    document.getElementById('fmtModalTitle').textContent='Edit Format Config';
-    document.getElementById('fmtForm').action='/DataInputFormats/Edit';
-    document.getElementById('fm_id').value=c.id;
-    document.getElementById('fm_name').value=c.formatName||'';
-    document.getElementById('fm_sid').value=c.sourceId||'';
-    document.getElementById('fm_type').value=c.sourceType||'physical';
-    document.getElementById('fm_src').value=c.inputSource||'';
-    document.getElementById('fm_desc').value=c.description||'';
-    document.querySelectorAll('.fm-field').forEach(cb=>cb.checked=(c.enabledFields||[]).includes(cb.value));
-    document.getElementById('customFields').innerHTML='';
+    var c = fmts.find(function(x){ return x.id === id; }); if (!c) return;
+    document.getElementById('fmtModalTitle').textContent = 'Edit Format Config';
+    document.getElementById('fmtForm').action = '/DataInputFormats/Edit';
+    document.getElementById('fm_id').value    = c.id;
+    document.getElementById('fm_name').value  = c.formatName  || '';
+    document.getElementById('fm_sid').value   = c.sourceId    || '';
+    document.getElementById('fm_type').value  = c.sourceType  || 'physical';
+    document.getElementById('fm_src').value   = c.inputSource || '';
+    document.getElementById('fm_desc').value  = c.description || '';
+    document.querySelectorAll('.fm-field').forEach(function(cb){
+        cb.checked = (c.enabledFields||[]).includes(cb.value);
+    });
+    document.getElementById('customFields').innerHTML = '';
 }
 function addCustomField() {
-    var div=document.createElement('div');
-    div.className='row g-1 mb-1 align-items-center';
-    div.innerHTML='<div class="col-6"><input type="text" name="customFieldNames" class="form-control form-control-sm font-monospace" placeholder="field_name" /></div>'+
-        '<div class="col-5"><select name="customFieldTypes" class="form-select form-select-sm"><option>string</option><option>number</option><option>boolean</option><option>array</option><option>object</option></select></div>'+
+    var div = document.createElement('div');
+    div.className = 'row g-1 mb-1 align-items-center';
+    div.innerHTML =
+        '<div class="col-6"><input type="text" name="customFieldNames" class="form-control form-control-sm font-monospace" placeholder="field_name" /></div>' +
+        '<div class="col-5"><select name="customFieldTypes" class="form-select form-select-sm"><option>string</option><option>number</option><option>boolean</option><option>array</option><option>object</option></select></div>' +
         '<div class="col-1"><button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-x"></i></button></div>';
     document.getElementById('customFields').appendChild(div);
-}
-function copyPayload(id) {
-    var pre=document.getElementById('pl_'+id);
-    if(pre) navigator.clipboard.writeText(pre.textContent).then(()=>alert('Payload copied!'));
 }
 </script>
 }

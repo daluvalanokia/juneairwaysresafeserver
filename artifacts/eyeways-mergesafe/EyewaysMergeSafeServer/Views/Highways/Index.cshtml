@@ -1,0 +1,102 @@
+@model List<EyewaysMergeSafeServer.Models.Highway>
+@{ ViewData["Title"] = "Highways"; }
+
+<div class="mss-page-header">
+    <div><h2 class="mss-page-title">Highways</h2><p class="mss-page-sub">Manage monitored highway corridors</p></div>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#hwModal" onclick="openNew()">
+        <i class="bi bi-plus me-1"></i>Add Highway
+    </button>
+</div>
+
+<script id="hwData" type="application/json">
+@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Select(h => new { h.Id, h.Name, h.HighwayId, h.State, h.Description, h.IsActive })))
+</script>
+
+<div class="mss-card">
+    <div class="mss-card-body p-0">
+        <table class="table table-dark table-hover mb-0">
+            <thead><tr>
+                <th>Highway ID</th><th>Name</th><th>State</th><th>Status</th><th>Created</th><th></th>
+            </tr></thead>
+            <tbody>
+            @foreach (var h in Model)
+            {
+                <tr>
+                    <td class="font-monospace small">@h.HighwayId</td>
+                    <td class="fw-semibold">@h.Name</td>
+                    <td>@h.State</td>
+                    <td><span class="mss-badge @(h.IsActive ? "mss-badge--active" : "mss-badge--inactive")">@(h.IsActive ? "Active" : "Inactive")</span></td>
+                    <td class="text-muted small">@h.CreatedDate.ToString("yyyy-MM-dd")</td>
+                    <td class="text-end">
+                        <button class="btn btn-outline-secondary btn-sm me-1" onclick="openEdit(@h.Id)" data-bs-toggle="modal" data-bs-target="#hwModal"><i class="bi bi-pencil"></i></button>
+                        <form method="post" asp-action="Delete" asp-route-id="@h.Id" style="display:inline" onsubmit="return confirm('Delete @h.Name?')">
+                            @Html.AntiForgeryToken()
+                            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            @if (!Model.Any())
+            { <tr><td colspan="6" class="text-muted text-center py-3">No highways configured.</td></tr> }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="hwModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content mss-modal">
+      <div class="modal-header border-bottom border-secondary">
+        <h5 class="modal-title" id="hwModalTitle">Add Highway</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="hwForm" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Id" id="hw_id" value="0" />
+            <div class="row g-2">
+                <div class="col-12"><label class="form-label small">Name *</label><input type="text" name="Name" id="hw_name" class="form-control" required /></div>
+                <div class="col-6"><label class="form-label small">Highway ID *</label><input type="text" name="HighwayId" id="hw_hid" class="form-control font-monospace" required /></div>
+                <div class="col-6"><label class="form-label small">State</label><input type="text" name="State" id="hw_state" class="form-control" maxlength="50" /></div>
+                <div class="col-12"><label class="form-label small">Description</label><input type="text" name="Description" id="hw_desc" class="form-control" /></div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input type="checkbox" name="IsActive" id="hw_active" class="form-check-input" value="true" checked />
+                        <label class="form-check-label small" for="hw_active">Active</label>
+                    </div>
+                </div>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer border-top border-secondary">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="submitHw()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+var hws = JSON.parse(document.getElementById('hwData').textContent);
+function openNew() {
+    document.getElementById('hwModalTitle').textContent = 'Add Highway';
+    document.getElementById('hwForm').action = '/Highways/Create';
+    document.getElementById('hw_id').value = 0;
+    ['hw_name','hw_hid','hw_state','hw_desc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('hw_active').checked = true;
+}
+function openEdit(id) {
+    var h = hws.find(x => x.id === id); if (!h) return;
+    document.getElementById('hwModalTitle').textContent = 'Edit Highway';
+    document.getElementById('hwForm').action = '/Highways/Edit';
+    document.getElementById('hw_id').value = h.id;
+    document.getElementById('hw_name').value = h.name || '';
+    document.getElementById('hw_hid').value = h.highwayId || '';
+    document.getElementById('hw_state').value = h.state || '';
+    document.getElementById('hw_desc').value = h.description || '';
+    document.getElementById('hw_active').checked = h.isActive;
+}
+function submitHw() { document.getElementById('hwForm').submit(); }
+</script>
+}

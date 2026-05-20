@@ -1,12 +1,27 @@
 // EyewaysMergeSafeServer — site.js
 
 document.addEventListener('DOMContentLoaded', function () {
-    var toggle = document.getElementById('sidebarToggle');
+    var toggle  = document.getElementById('sidebarToggle');
     var sidebar = document.querySelector('.mss-sidebar');
+    var main    = document.querySelector('.mss-main');
+
     if (toggle && sidebar) {
+        // Restore persisted state
+        if (localStorage.getItem('sidebarCollapsed') === '1' && window.innerWidth >= 768) {
+            sidebar.classList.add('collapsed');
+            if (main) main.classList.add('sidebar-collapsed');
+        }
+
         toggle.addEventListener('click', function () {
-            sidebar.classList.toggle('open');
+            if (window.innerWidth >= 768) {
+                var isCollapsed = sidebar.classList.toggle('collapsed');
+                if (main) main.classList.toggle('sidebar-collapsed', isCollapsed);
+                localStorage.setItem('sidebarCollapsed', isCollapsed ? '1' : '0');
+            } else {
+                sidebar.classList.toggle('open');
+            }
         });
+
         document.addEventListener('click', function (e) {
             if (window.innerWidth < 768 && sidebar.classList.contains('open')) {
                 if (!sidebar.contains(e.target) && e.target !== toggle) {
@@ -16,6 +31,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Auto-dismiss success alerts after 4 s
     setTimeout(function () {
         document.querySelectorAll('.alert.alert-success').forEach(function (el) {
             var bsAlert = bootstrap.Alert.getOrCreateInstance(el);
@@ -23,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }, 4000);
 
+    // Bootstrap tooltips
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
         new bootstrap.Tooltip(el);
     });

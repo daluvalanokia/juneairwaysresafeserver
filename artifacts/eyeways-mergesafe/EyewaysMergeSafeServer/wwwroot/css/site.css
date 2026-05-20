@@ -15,7 +15,8 @@
   --mss-purple:      #a855f7;
   --mss-text:        #e2e8f0;
   --mss-muted:       #64748b;
-  --mss-sidebar-w:   220px;
+  --mss-sidebar-w:   224px;
+  --mss-sidebar-collapsed-w: 64px;
 }
 
 * { box-sizing: border-box; }
@@ -41,7 +42,24 @@ body.mss-body {
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 200;
-  transition: transform .25s ease;
+  transition: width .25s ease, transform .25s ease;
+  overflow: hidden;
+}
+
+/* Desktop collapsed (icon-only) */
+.mss-sidebar.collapsed {
+  width: var(--mss-sidebar-collapsed-w);
+}
+.mss-sidebar.collapsed .mss-brand-name,
+.mss-sidebar.collapsed .mss-nav-label {
+  display: none;
+}
+.mss-sidebar.collapsed .mss-nav-item {
+  justify-content: center;
+  padding: 10px 0;
+}
+.mss-sidebar.collapsed .mss-sidebar-footer .mss-nav-item {
+  justify-content: center;
 }
 
 .mss-brand {
@@ -50,6 +68,7 @@ body.mss-body {
   gap: 10px;
   padding: 20px 16px 16px;
   border-bottom: 1px solid var(--mss-border);
+  white-space: nowrap;
 }
 .mss-brand-icon {
   width: 34px; height: 34px;
@@ -57,6 +76,7 @@ body.mss-body {
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px;
+  flex-shrink: 0;
 }
 .mss-brand-name {
   font-weight: 700;
@@ -69,6 +89,7 @@ body.mss-body {
   flex: 1;
   padding: 10px 8px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .mss-nav-item {
   display: flex;
@@ -81,10 +102,12 @@ body.mss-body {
   font-size: 13px;
   transition: background .15s, color .15s;
   margin-bottom: 2px;
+  white-space: nowrap;
 }
-.mss-nav-item:hover { background: var(--mss-surface2); color: var(--mss-text); }
+.mss-nav-item:hover  { background: var(--mss-surface2); color: var(--mss-text); }
 .mss-nav-item.active { background: rgba(59,130,246,.15); color: var(--mss-primary); }
-.mss-nav-icon { font-size: 16px; flex-shrink: 0; }
+.mss-nav-icon  { font-size: 16px; flex-shrink: 0; }
+.mss-nav-label { flex: 1; }
 
 .mss-sidebar-footer {
   padding: 10px 8px 16px;
@@ -94,10 +117,13 @@ body.mss-body {
 .mss-sidebar-toggle {
   background: none;
   border: none;
-  color: var(--mss-text);
+  color: var(--mss-muted);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: color .15s, background .15s;
 }
+.mss-sidebar-toggle:hover { background: var(--mss-surface2); color: var(--mss-text); }
 
 /* ── Main ─────────────────────────────────────────────────── */
 .mss-main {
@@ -106,6 +132,10 @@ body.mss-body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  transition: margin-left .25s ease;
+}
+.mss-main.sidebar-collapsed {
+  margin-left: var(--mss-sidebar-collapsed-w);
 }
 
 /* ── Top bar ─────────────────────────────────────────────── */
@@ -117,6 +147,8 @@ body.mss-body {
   align-items: center;
   gap: 12px;
   position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .mss-live-dot {
   width: 8px; height: 8px;
@@ -281,6 +313,15 @@ body.mss-body {
   overflow-x: auto;
 }
 
+/* ── Inline payload preview ──────────────────────────────── */
+.mss-payload-preview {
+  display: none;
+  border-top: 1px solid var(--mss-border);
+  padding: 12px;
+  background: #050a12;
+}
+.mss-payload-preview.show { display: block; }
+
 /* ── Portal login page ───────────────────────────────────── */
 body.mss-portal-body { background: var(--mss-bg); }
 .mss-portal-card {
@@ -306,6 +347,11 @@ body.mss-portal-body { background: var(--mss-bg); }
   background: none; border: none;
   color: var(--mss-muted); cursor: pointer; padding: 0;
 }
+
+/* ── Leaflet map (dark) ──────────────────────────────────── */
+.leaflet-container { background: var(--mss-bg) !important; }
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip { background: var(--mss-surface); color: var(--mss-text); border: 1px solid var(--mss-border); }
 
 /* ── Bootstrap overrides (dark mode) ─────────────────────── */
 .form-control, .form-select {
@@ -342,8 +388,10 @@ body.mss-portal-body { background: var(--mss-bg); }
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .mss-sidebar { transform: translateX(-100%); }
+  .mss-sidebar { transform: translateX(-100%); width: var(--mss-sidebar-w) !important; }
   .mss-sidebar.open { transform: translateX(0); }
-  .mss-main { margin-left: 0; }
+  .mss-main { margin-left: 0 !important; }
   .mss-stat-value { font-size: 24px; }
+  .mss-sidebar.collapsed { transform: translateX(-100%); }
+  .mss-sidebar.collapsed.open { transform: translateX(0); }
 }

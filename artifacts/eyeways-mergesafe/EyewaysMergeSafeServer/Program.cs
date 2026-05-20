@@ -1,5 +1,6 @@
 using EyewaysMergeSafeServer.Data;
 using EyewaysMergeSafeServer.Filters;
+using EyewaysMergeSafeServer.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,7 +26,6 @@ static string ParsePostgresUrl(string url)
 {
     try
     {
-        // Pattern: postgresql://user:pass@host:port/dbname?key=val
         var m = System.Text.RegularExpressions.Regex.Match(url,
             @"^(?:postgresql|postgres)://([^:@]+)(?::([^@]*))?@([^/:?]+)(?::(\d+))?/([^?]*)(?:\?(.*))?$");
         if (!m.Success) return url;
@@ -49,10 +49,7 @@ static string ParsePostgresUrl(string url)
         }
         return conn;
     }
-    catch
-    {
-        return url;
-    }
+    catch { return url; }
 }
 
 builder.Services.AddControllersWithViews(opts =>
@@ -62,16 +59,16 @@ builder.Services.AddControllersWithViews(opts =>
 
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromHours(8);
-    options.Cookie.HttpOnly = true;
+    options.IdleTimeout    = TimeSpan.FromHours(8);
+    options.Cookie.HttpOnly   = true;
     options.Cookie.IsEssential = true;
 });
 
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache(opts =>
 {
-    opts.AddPolicy("Highways", p => p.Expire(TimeSpan.FromMinutes(10)).Tag("highways"));
-    opts.AddPolicy("ShortLive", p => p.Expire(TimeSpan.FromMinutes(5)));
+    opts.AddPolicy("Highways",   p => p.Expire(TimeSpan.FromMinutes(10)).Tag("highways"));
+    opts.AddPolicy("ShortLive",  p => p.Expire(TimeSpan.FromMinutes(5)));
 });
 
 builder.Services.AddHttpClient();
@@ -80,6 +77,11 @@ builder.Services.AddResponseCompression(opts =>
 {
     opts.EnableForHttps = true;
 });
+
+// ── Application services ──────────────────────────────────────────────────
+builder.Services.AddScoped<InputPayloadService>();
+builder.Services.AddSingleton<TrafficService>();
+builder.Services.AddSingleton<ConfigService>();
 
 var app = builder.Build();
 

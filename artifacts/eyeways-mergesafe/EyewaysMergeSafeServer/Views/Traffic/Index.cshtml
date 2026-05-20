@@ -1,12 +1,12 @@
 @model EyewaysMergeSafeServer.ViewModels.Traffic3DViewModel
-@{ ViewData["Title"] = "3D Traffic"; ViewBag.Highways = Model.Highways; ViewBag.SelectedHighwayId = Model.SelectedHighwayId; }
+@{ ViewData["Title"] = "Traffic"; ViewBag.Highways = Model.Highways; ViewBag.SelectedHighwayId = Model.SelectedHighwayId; }
 @{
     var zones   = Model.Zones;
     var sensors = Model.Sensors;
 }
 
 <div class="mss-page-header">
-    <div><h2 class="mss-page-title">3D Traffic Visualization</h2><p class="mss-page-sub">Highway map with Leaflet overlays and Three.js Scene3D</p></div>
+    <div><h2 class="mss-page-title">Traffic Visualization</h2><p class="mss-page-sub">Highway map with Leaflet 2D and Three.js Scene3D</p></div>
     <div class="d-flex gap-2">
         <button id="btnMap" class="btn btn-primary btn-sm" onclick="setMode('map')"><i class="bi bi-map me-1"></i>Map</button>
         <button id="btn3d"  class="btn btn-outline-secondary btn-sm" onclick="setMode('3d')"><i class="bi bi-badge-3d me-1"></i>3D Scene</button>
@@ -20,19 +20,19 @@
                 <span><i class="bi bi-map me-1"></i> Highway Map</span>
                 <span class="text-muted small" id="mapRefreshTimer">Refreshes in 5:00</span>
             </div>
-            <div id="leafletMap" style="height:500px;border-radius:0 0 12px 12px;"></div>
+            <div id="leafletMap" style="height:520px;border-radius:0 0 12px 12px;"></div>
         </div>
 
         <div id="scene3dPanel" class="mss-card" style="display:none">
-            <div class="mss-card-header"><i class="bi bi-badge-3d me-1"></i> Scene3D — Three.js WebGL</div>
-            <div id="scene3dContainer" style="width:100%;height:500px;border-radius:0 0 12px 12px;overflow:hidden;"></div>
+            <div class="mss-card-header"><i class="bi bi-badge-3d me-1"></i> Scene3D — Three.js</div>
+            <div id="scene3dContainer" style="width:100%;height:520px;border-radius:0 0 12px 12px;overflow:hidden;"></div>
         </div>
     </div>
 
     <div class="col-lg-3">
         <div class="mss-card mb-3">
             <div class="mss-card-header"><i class="bi bi-info-circle me-1"></i> Zones</div>
-            <div class="mss-card-body p-0" style="max-height:200px;overflow-y:auto">
+            <div class="mss-card-body p-0" style="max-height:160px;overflow-y:auto">
                 @foreach (var z in zones)
                 {
                     <div class="mss-list-item d-flex justify-content-between align-items-center">
@@ -40,8 +40,7 @@
                         <span class="mss-badge mss-badge--@z.Status">@z.Status</span>
                     </div>
                 }
-                @if (!zones.Any())
-                { <p class="text-muted small p-2">No zones.</p> }
+                @if (!zones.Any()) { <p class="text-muted small p-2">No zones.</p> }
             </div>
         </div>
 
@@ -59,11 +58,11 @@
 
         <div class="mss-card">
             <div class="mss-card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-activity me-1"></i> Live Feed</span>
+                <span><i class="bi bi-activity me-1"></i> Traffic Feed</span>
                 <span class="mss-badge mss-badge--active" style="animation:pulse 1s infinite">LIVE</span>
             </div>
-            <div class="mss-card-body p-0" id="trafficFeed" style="max-height:280px;overflow-y:auto">
-                <p class="text-muted small p-2">Loading traffic data…</p>
+            <div class="mss-card-body p-0" id="trafficFeed" style="max-height:260px;overflow-y:auto">
+                <p class="text-muted small p-2">Loading segments…</p>
             </div>
         </div>
     </div>
@@ -85,34 +84,32 @@ var zoneData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
 // ── Leaflet map ────────────────────────────────────────────────────────────
 var mapCenter = zoneData.length > 0 ? [zoneData[0].lat, zoneData[0].lon] : [32.7767, -96.7970];
 var map = L.map('leafletMap').setView(mapCenter, 10);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution:'© OSM, CARTO' }).addTo(map);
-
-sensorData.forEach(function(s) {
-    var color = {camera:'#3b82f6',lidar:'#a855f7',radar:'#f59e0b','vehicle tag reader':'#22c55e'}[s.deviceType] || '#fff';
-    L.circleMarker([s.lat, s.lon], {radius:5, color:color, fillColor:color, fillOpacity:0.9})
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM, CARTO'}).addTo(map);
+sensorData.forEach(function(s){
+    var color={camera:'#3b82f6',lidar:'#a855f7',radar:'#f59e0b','vehicle tag reader':'#22c55e'}[s.deviceType]||'#fff';
+    L.circleMarker([s.lat,s.lon],{radius:5,color:color,fillColor:color,fillOpacity:0.9})
         .bindPopup('<b>'+s.deviceName+'</b><br>'+s.deviceType+'<br>'+s.status).addTo(map);
 });
-zoneData.forEach(function(z) {
-    var c = z.status==='fault'?'#ef4444':'#22c55e';
-    L.circle([z.lat,z.lon],{radius:z.r,color:c,fillColor:c,fillOpacity:0.1}).addTo(map);
-    L.circleMarker([z.lat,z.lon],{radius:8,color:c,fillColor:c,fillOpacity:0.9})
-        .bindPopup('<b>'+z.zoneName+'</b><br>'+z.status).addTo(map);
+zoneData.forEach(function(z){
+    var c=z.status==='fault'?'#ef4444':'#22c55e';
+    L.circle([z.lat,z.lon],{radius:z.r,color:c,fillColor:c,fillOpacity:0.08}).addTo(map);
+    L.circleMarker([z.lat,z.lon],{radius:9,color:c,fillColor:c,fillOpacity:0.9}).bindPopup('<b>'+z.zoneName+'</b><br>'+z.status).addTo(map);
 });
 
-// Fetch traffic segments and render feed
+// Load segments into feed on start
 loadSegments();
 function loadSegments() {
-    fetch('/Traffic3D/GetTrafficSegments?highwayId=' + encodeURIComponent(highwayId))
-        .then(function(r) { return r.json(); })
+    fetch('/Traffic/GetSegments?highwayId=' + encodeURIComponent(highwayId))
+        .then(r => r.json())
         .then(renderFeed)
-        .catch(function() { renderFeed({segments:[]}); });
+        .catch(function(){ renderFeed({segments:[]}); });
 }
 function renderFeed(data) {
     var segs = data.segments || [];
     var feed = document.getElementById('trafficFeed');
     if (!segs.length) { feed.innerHTML = '<p class="text-muted small p-2">No segment data.</p>'; return; }
-    var colorMap = {free:'#22c55e', moderate:'#f59e0b', heavy:'#ef4444'};
-    feed.innerHTML = segs.map(function(s) {
+    var colorMap = {free:'#22c55e',moderate:'#f59e0b',heavy:'#ef4444'};
+    feed.innerHTML = segs.map(function(s){
         var c = colorMap[s.congestion] || '#64748b';
         return '<div class="mss-list-item d-flex justify-content-between align-items-center">' +
             '<span class="small fw-semibold" style="color:'+c+'">'+s.name+'</span>' +
@@ -122,23 +119,23 @@ function renderFeed(data) {
 }
 
 // ── Mode toggle ────────────────────────────────────────────────────────────
-var scene3dInitialized = false;
+var scene3dRunning = false;
 function setMode(m) {
-    document.getElementById('mapPanel').style.display     = m==='map' ? '' : 'none';
-    document.getElementById('scene3dPanel').style.display = m==='3d'  ? '' : 'none';
+    document.getElementById('mapPanel').style.display   = m==='map' ? '' : 'none';
+    document.getElementById('scene3dPanel').style.display = m==='3d' ? '' : 'none';
     document.getElementById('btnMap').className = m==='map'?'btn btn-primary btn-sm':'btn btn-outline-secondary btn-sm';
     document.getElementById('btn3d').className  = m==='3d' ?'btn btn-primary btn-sm':'btn btn-outline-secondary btn-sm';
-    if (m==='3d' && !scene3dInitialized) initScene3D();
+    if (m==='3d' && !scene3dRunning) initScene3D();
 }
 
-// ── Three.js Scene3D module ────────────────────────────────────────────────
+// ── Three.js Scene3D ───────────────────────────────────────────────────────
 var speedMult = 1, density = 10, camAngleVal = 45;
-var renderer3d, camera3d, scene3d, vehicles3d = [];
-
+var renderer3d, camera3d, scene3d, vehicles3d = [], animId;
 function setCamAngle(v) {
     camAngleVal = parseFloat(v);
     if (camera3d) {
-        var d = 35, rad = camAngleVal * Math.PI / 180;
+        var d = 35;
+        var rad = camAngleVal * Math.PI / 180;
         camera3d.position.set(0, Math.sin(rad)*d, Math.cos(rad)*d);
         camera3d.lookAt(0, 0, 0);
     }
@@ -147,15 +144,15 @@ function setSpeedMult(v) { speedMult = parseFloat(v); }
 function setDensity(v)   { density = parseInt(v); }
 
 function initScene3D() {
-    scene3dInitialized = true;
+    scene3dRunning = true;
     var container = document.getElementById('scene3dContainer');
     var W = container.clientWidth, H = container.clientHeight;
 
     scene3d = new THREE.Scene();
     scene3d.background = new THREE.Color(0x0a0f1a);
-    scene3d.fog = new THREE.FogExp2(0x0a0f1a, 0.016);
+    scene3d.fog = new THREE.FogExp2(0x0a0f1a, 0.018);
 
-    camera3d = new THREE.PerspectiveCamera(45, W/H, 0.1, 500);
+    camera3d = new THREE.PerspectiveCamera(45, W / H, 0.1, 500);
     camera3d.position.set(0, 22, 28);
     camera3d.lookAt(0, 0, 0);
 
@@ -165,41 +162,45 @@ function initScene3D() {
     renderer3d.shadowMap.enabled = true;
     container.appendChild(renderer3d.domElement);
 
-    // Lights
-    scene3d.add(new THREE.AmbientLight(0x334466, 2));
+    var ambient = new THREE.AmbientLight(0x334466, 2);
+    scene3d.add(ambient);
     var dir = new THREE.DirectionalLight(0x8899ff, 2);
-    dir.position.set(10, 20, 10); dir.castShadow = true;
+    dir.position.set(10, 20, 10);
+    dir.castShadow = true;
     scene3d.add(dir);
 
     // Ground
-    var groundMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(120, 120),
-        new THREE.MeshLambertMaterial({ color: 0x050a12 })
-    );
-    groundMesh.rotation.x = -Math.PI/2; groundMesh.receiveShadow = true;
-    scene3d.add(groundMesh);
+    var geoGround = new THREE.PlaneGeometry(100, 100);
+    var matGround = new THREE.MeshLambertMaterial({ color: 0x050a12 });
+    var ground = new THREE.Mesh(geoGround, matGround);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene3d.add(ground);
 
-    // Road (3 lanes × 2 directions)
-    var road = new THREE.Mesh(
-        new THREE.PlaneGeometry(14, 80),
-        new THREE.MeshLambertMaterial({ color: 0x1a2035 })
-    );
-    road.rotation.x = -Math.PI/2; road.position.y = 0.02; road.receiveShadow = true;
+    // Road surface (3 lanes each direction)
+    var geoRoad = new THREE.PlaneGeometry(14, 80);
+    var matRoad = new THREE.MeshLambertMaterial({ color: 0x1a2035 });
+    var road = new THREE.Mesh(geoRoad, matRoad);
+    road.rotation.x = -Math.PI / 2;
+    road.position.y = 0.02;
+    road.receiveShadow = true;
     scene3d.add(road);
 
-    // Lane markers
-    for (var zi = -36; zi < 37; zi += 6) {
-        [-5, -3, 3, 5].forEach(function(xl) {
-            var lm = new THREE.Mesh(
-                new THREE.PlaneGeometry(0.12, 3),
-                new THREE.MeshBasicMaterial({ color: Math.abs(xl) === 5 ? 0xffffff : 0xffff00 })
-            );
-            lm.rotation.x = -Math.PI/2; lm.position.set(xl, 0.03, zi);
-            scene3d.add(lm);
-        });
+    // Lane dividers
+    for (var i = -35; i < 36; i += 6) {
+        for (var l = -5; l <= 5; l += 5) {
+            if (l === 0) continue;
+            var geoLane = new THREE.PlaneGeometry(0.15, 3);
+            var matLane = new THREE.MeshBasicMaterial({ color: l === -5 || l === 5 ? 0xffffff : 0xffff00 });
+            var lane = new THREE.Mesh(geoLane, matLane);
+            lane.rotation.x = -Math.PI / 2;
+            lane.position.set(l, 0.03, i);
+            scene3d.add(lane);
+        }
     }
 
-    // Spawn vehicles
+    // Spawn initial vehicles
+    vehicles3d = [];
     for (var vi = 0; vi < density; vi++) spawnV();
 
     animate3d();
@@ -208,49 +209,52 @@ function initScene3D() {
         if (!renderer3d) return;
         var W2 = container.clientWidth, H2 = container.clientHeight;
         renderer3d.setSize(W2, H2);
-        camera3d.aspect = W2/H2;
+        camera3d.aspect = W2 / H2;
         camera3d.updateProjectionMatrix();
     });
 }
 
 var vColors = [0x3b82f6, 0x22c55e, 0xf59e0b, 0xef4444, 0xa855f7, 0x06b6d4];
-var feedItems3d = [];
-
+var feedItems = [];
 function spawnV() {
+    var col = vColors[Math.floor(Math.random() * vColors.length)];
     var geo = new THREE.BoxGeometry(1.8, 0.75, 3.2);
-    var mat = new THREE.MeshLambertMaterial({ color: vColors[Math.floor(Math.random()*vColors.length)] });
+    var mat = new THREE.MeshLambertMaterial({ color: col });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
-    var lane = [-4,-2,2,4][Math.floor(Math.random()*4)];
-    mesh.position.set(lane, 0.5, (Math.random()*80)-40);
-    mesh.userData = { speed: (25+Math.random()*55)*0.012, dir: lane<0?1:-1, lane: lane };
+    var lane = [-4, -2, 2, 4][Math.floor(Math.random() * 4)];
+    var dir = lane < 0 ? 1 : -1;
+    mesh.position.set(lane, 0.5, (Math.random() * 80) - 40);
+    mesh.userData = { speed: (25 + Math.random() * 55) * 0.012, dir: dir, lane: lane };
     scene3d.add(mesh);
     vehicles3d.push(mesh);
 }
 
 function animate3d() {
-    requestAnimationFrame(animate3d);
+    animId = requestAnimationFrame(animate3d);
     vehicles3d.forEach(function(v) {
         v.position.z += v.userData.dir * v.userData.speed * speedMult;
-        if (v.position.z >  42) { v.position.z = -42; pushFeed3d(v); }
-        if (v.position.z < -42) { v.position.z =  42; pushFeed3d(v); }
+        if (v.position.z > 42)  { v.position.z = -42; pushFeed(v); }
+        if (v.position.z < -42) { v.position.z =  42; pushFeed(v); }
     });
     while (vehicles3d.length < density) spawnV();
-    while (vehicles3d.length > density) scene3d.remove(vehicles3d.pop());
+    while (vehicles3d.length > density) {
+        scene3d.remove(vehicles3d.pop());
+    }
     renderer3d.render(scene3d, camera3d);
 }
 
-function pushFeed3d(v) {
-    var spd = Math.round((25+Math.random()*55)*speedMult);
-    feedItems3d.unshift({ spd: spd, dir: v.userData.lane < 0 ? 'SB' : 'NB', time: new Date().toLocaleTimeString() });
-    if (feedItems3d.length > 20) feedItems3d.pop();
+function pushFeed(v) {
+    var speed = Math.round((25 + Math.random() * 55) * speedMult);
+    feedItems.unshift({ speed: speed, lane: v.userData.lane, time: new Date().toLocaleTimeString() });
+    if (feedItems.length > 20) feedItems.pop();
     var feed = document.getElementById('trafficFeed');
-    feed.innerHTML = feedItems3d.map(function(f) {
+    feed.innerHTML = feedItems.map(function(f) {
         return '<div class="mss-list-item d-flex justify-content-between align-items-center">' +
             '<span class="text-primary small fw-bold">DETECTION</span>' +
-            '<span class="small text-muted">'+f.dir+'</span>' +
-            '<span class="small">'+f.spd+' mph</span>' +
-            '<span class="ms-auto font-monospace text-muted" style="font-size:.62rem">'+f.time+'</span>' +
+            '<span class="small text-muted">Lane ' + (f.lane < 0 ? 'SB' : 'NB') + '</span>' +
+            '<span class="small">' + f.speed + ' mph</span>' +
+            '<span class="ms-auto font-monospace text-muted" style="font-size:.62rem">' + f.time + '</span>' +
             '</div>';
     }).join('');
 }
@@ -260,9 +264,9 @@ var countdown = 300;
 setInterval(function() {
     countdown--;
     if (countdown <= 0) { countdown = 300; loadSegments(); }
-    var m = Math.floor(countdown/60), s = countdown%60;
-    document.getElementById('mapRefreshTimer').textContent =
-        'Refreshes in ' + m + ':' + (s<10?'0':'') + s;
+    var m = Math.floor(countdown / 60), s = countdown % 60;
+    var el = document.getElementById('mapRefreshTimer');
+    if (el) el.textContent = 'Refreshes in ' + m + ':' + (s < 10 ? '0' : '') + s;
 }, 1000);
 </script>
 }

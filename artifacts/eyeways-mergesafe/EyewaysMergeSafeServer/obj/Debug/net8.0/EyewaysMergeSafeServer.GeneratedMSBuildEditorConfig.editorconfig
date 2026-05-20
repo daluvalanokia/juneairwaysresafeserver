@@ -30,6 +30,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3MvRXZlbnRzL0luZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
+[/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/Highways/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3MvSGlnaHdheXMvSW5kZXguY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
 [/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/MergeZones/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3MvTWVyZ2Vab25lcy9JbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
@@ -54,6 +58,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3MvU3dpdGNoU2VydmVycy9JbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
+[/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/Traffic/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3MvVHJhZmZpYy9JbmRleC5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
 [/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/Traffic3D/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3MvVHJhZmZpYzNEL0luZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
@@ -64,6 +72,10 @@ build_metadata.AdditionalFiles.CssScope =
 
 [/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/Users/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3MvVXNlcnMvSW5kZXguY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/VehicleEvents/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3MvVmVoaWNsZUV2ZW50cy9JbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
 [/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/Views/_ViewImports.cshtml]
