@@ -9,6 +9,10 @@
       "PackagePath": "staticwebassets/js/site.js"
     },
     {
+      "Id": "/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/wwwroot/js/vehicleScene.js",
+      "PackagePath": "staticwebassets/js/vehicleScene.js"
+    },
+    {
       "Id": "obj/Debug/net8.0/staticwebassets/msbuild.EyewaysMergeSafeServer.Microsoft.AspNetCore.StaticWebAssets.props",
       "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
     },

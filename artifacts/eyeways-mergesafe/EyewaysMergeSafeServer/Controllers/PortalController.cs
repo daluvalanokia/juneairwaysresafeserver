@@ -22,6 +22,9 @@ public class PortalController : Controller
         return View(vm);
     }
 
+    [HttpGet("Portal/Login")]
+    public IActionResult LoginGet() => RedirectToAction("Index");
+
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(string highwayId, string userId, string password)
     {

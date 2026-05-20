@@ -1,6 +1,6 @@
 {
   "Version": 1,
-  "Hash": "sHzxEe9iimyp8ARHvp1kxXyfyBVsnw2hCoSx3Tvd128=",
+  "Hash": "ESDI/vLEle288E4AfVFtOZojklZA+at/DNXmmvzRb6A=",
   "Source": "EyewaysMergeSafeServer",
   "BasePath": "_content/EyewaysMergeSafeServer",
   "Mode": "Default",
@@ -53,6 +53,25 @@
       "CopyToOutputDirectory": "Never",
       "CopyToPublishDirectory": "PreserveNewest",
       "OriginalItemSpec": "wwwroot/js/site.js"
+    },
+    {
+      "Identity": "/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/wwwroot/js/vehicleScene.js",
+      "SourceId": "EyewaysMergeSafeServer",
+      "SourceType": "Discovered",
+      "ContentRoot": "/home/runner/workspace/artifacts/eyeways-mergesafe/EyewaysMergeSafeServer/wwwroot/",
+      "BasePath": "_content/EyewaysMergeSafeServer",
+      "RelativePath": "js/vehicleScene.js",
+      "AssetKind": "All",
+      "AssetMode": "All",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "PreferTarget",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "",
+      "AssetTraitValue": "",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "wwwroot/js/vehicleScene.js"
     }
   ]
 }
