@@ -46,6 +46,14 @@
                 <span>@item.Label</span>
             </a>
         }
+    @if (Context.Session.GetString("UserType") == "admin")
+    {
+        <a href="/DatabaseViewer"
+           class="mss-nav-item @(currentCtrl == "databaseviewer" ? "active" : "")">
+            <i class="bi bi-table mss-nav-icon"></i>
+            <span>Database Viewer</span>
+        </a>
+    }
     </div>
     <div class="mss-sidebar-footer">
         <a href="/Portal/Logout" class="mss-nav-item">
