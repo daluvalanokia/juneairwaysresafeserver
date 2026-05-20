@@ -203,6 +203,8 @@ function selectZone(zoneId) {
 }
 
 function selectZoneByServer(zoneId) {
+    // Show the map first so the fly-to zoom is visible, then filter
+    setMode('map');
     selectZone(zoneId);
 }
 
@@ -344,7 +346,31 @@ function setMode(m) {
     document.getElementById('scene3dPanel').style.display = m === '3d'  ? '' : 'none';
     document.getElementById('btnMap').className = m === 'map' ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
     document.getElementById('btn3d').className  = m === '3d'  ? 'btn btn-primary btn-sm' : 'btn btn-outline-secondary btn-sm';
-    if (m === '3d' && !scene3dInitialized) initScene3D();
+
+    if (m === '3d') {
+        if (!scene3dInitialized) {
+            initScene3D();
+        } else {
+            // Already running — flush feed and immediately re-poll for current zone
+            feedItems3d = [];
+            var zLabel = selectedZoneId
+                ? (zoneData.find(function(z) { return z.zoneId === selectedZoneId; }) || {}).zoneName || selectedZoneId
+                : null;
+            document.getElementById('trafficFeed').innerHTML =
+                '<p class="text-muted small p-2">' +
+                (zLabel ? 'Loading feed for <strong>' + zLabel + '</strong>…' : 'Refreshing live feed…') +
+                '</p>';
+            lastPollTime = new Date(Date.now() - 30000).toISOString();
+            pollLiveEvents();
+        }
+        updateSceneZoneLabel(selectedZoneId);
+    }
+
+    if (m === 'map') {
+        // Returning to map — restore segment feed if no live items yet
+        updateFeedTitle(selectedZoneId);
+        if (!feedItems3d.length) loadSegments();
+    }
 }
 
 // ── Three.js Scene3D ─────────────────────────────────────────────────────────
