@@ -62,6 +62,13 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    proxy: {
+      "^/(?!__mockup|@|__replco|node_modules|__vite_ping)": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        ws: false,
+      },
+    },
   },
   preview: {
     port,
