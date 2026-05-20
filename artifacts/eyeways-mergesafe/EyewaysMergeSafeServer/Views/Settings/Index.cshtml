@@ -39,12 +39,26 @@
         { <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Saved</span> }
     </div>
     <div class="mss-card-body">
-        <p class="text-muted small mb-3">
-            Automatically removes old <strong>Vehicle Events</strong> records.
-            Both rules run on every purge — records are deleted when they violate
-            <em>either</em> the age limit <em>or</em> the count cap, whichever
-            retains fewer records wins.
-        </p>
+        <div class="small mb-3">
+            <p class="text-muted mb-2">
+                Removes old rows from the <strong class="text-white">VehicleEvents</strong> table only.
+                Both rules run on every purge — a record is deleted when it violates
+                <em>either</em> the age limit <em>or</em> the count cap.
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-1">
+                <span class="badge bg-danger bg-opacity-75" title="Rows in this table are eligible for deletion">
+                    <i class="bi bi-trash3 me-1"></i>VehicleEvents — purged
+                </span>
+            </div>
+            <div class="d-flex flex-wrap gap-1">
+                @foreach (var tbl in new[]{"Highways","MergeZones","SwitchServers","SensorDevices","TriangulationConfigs","InputFormatConfigs","SamplePayloads","UserProfiles"})
+                {
+                    <span class="badge bg-success bg-opacity-50" title="Never touched by purge">
+                        <i class="bi bi-shield-check me-1"></i>@tbl
+                    </span>
+                }
+            </div>
+        </div>
 
         <form method="post" asp-action="SavePurgeSettings" class="row g-3 mb-3">
             @Html.AntiForgeryToken()
@@ -182,7 +196,7 @@ function toggleTomKey() {
 }
 
 function runPurge(btn) {
-    if (!confirm('Run purge now? This will permanently delete matching Vehicle Event records.')) return;
+    if (!confirm('Run purge now?\n\nOnly VehicleEvents rows matching the age/count policy will be deleted.\n\nAll configuration tables (Highways, MergeZones, SwitchServers, SensorDevices, TriangulationConfigs, InputFormatConfigs, SamplePayloads, UserProfiles) are never touched.')) return;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Purging…';
     var tok = document.querySelector('#purgeForm input[name="__RequestVerificationToken"]').value;
