@@ -381,20 +381,42 @@ function toggleAnimation() {
     btn.className = animationPaused ? 'btn btn-success btn-sm' : 'btn btn-outline-warning btn-sm';
 
     if (animationPaused) {
-        // ── PAUSED: stop live feed, start simulation-only polling ────────
+        // ── PAUSED: clear scene, stop live feed, start simulation-only ───
+        // 1. Remove every vehicle mesh from the WebGL scene
+        vehicles3d.forEach(function(v) { scene3d.remove(v); });
+        vehicles3d.length = 0;
+        // 2. Clear feed panel
+        feedItems3d.length = 0;
+        var feedEl = document.getElementById('trafficFeed');
+        if (feedEl) feedEl.innerHTML =
+            '<p class="text-muted small p-2"><i class="bi bi-cpu me-2"></i>' +
+            'Scene cleared — waiting for simulation events…</p>';
+        // 3. Switch polling to simulation-only
         if (liveEventInterval) { clearInterval(liveEventInterval); liveEventInterval = null; }
-        lastSimPollTime = new Date(Date.now() - 10000).toISOString();
+        lastSimPollTime = new Date(Date.now() - 5000).toISOString();
         simEventInterval = setInterval(pollSimulationEvents, 3000);
         pollSimulationEvents();
+        // 4. Update UI indicators
         if (feedTitle) { feedTitle.textContent = 'Simulation Feed'; feedTitle.style.color = '#f59e0b'; }
         if (simBadge)  simBadge.style.display = '';
         if (liveBadge) { liveBadge.textContent = 'SIM ONLY'; liveBadge.style.background = '#92400e'; }
     } else {
-        // ── RESUMED: stop sim polling, restart live feed ──────────────────
+        // ── RESUMED: clear sim vehicles, restart live feed ────────────────
+        // 1. Remove simulation vehicles from WebGL scene
+        vehicles3d.forEach(function(v) { scene3d.remove(v); });
+        vehicles3d.length = 0;
+        // 2. Clear feed
+        feedItems3d.length = 0;
+        var feedEl = document.getElementById('trafficFeed');
+        if (feedEl) feedEl.innerHTML =
+            '<p class="text-muted small p-2"><i class="bi bi-arrow-repeat me-2"></i>' +
+            'Resuming live feed…</p>';
+        // 3. Switch polling back to live
         if (simEventInterval) { clearInterval(simEventInterval); simEventInterval = null; }
         liveEventInterval = setInterval(pollLiveEvents, 3000);
         lastPollTime = new Date(Date.now() - 10000).toISOString();
         pollLiveEvents();
+        // 4. Restore UI indicators
         if (feedTitle) { feedTitle.textContent = 'Live Feed'; feedTitle.style.color = ''; }
         if (simBadge)  simBadge.style.display = 'none';
         if (liveBadge) { liveBadge.textContent = 'LIVE'; liveBadge.style.background = ''; }
