@@ -546,6 +546,13 @@ function initScene3D() {
     var tb = document.getElementById('btnAnimToggle');
     if (tb) { tb.style.display = ''; animationPaused = false; }
 
+    // Auto-enter simulation mode if a simulation was already running in another tab
+    try {
+        if (localStorage.getItem('eyeways_sim_active') === 'true') {
+            setTimeout(function() { if (!animationPaused) toggleAnimation(); }, 500);
+        }
+    } catch(e) {}
+
     window.addEventListener('resize', function() {
         if (!renderer3d) return;
         var W2 = container.clientWidth, H2 = container.clientHeight;
@@ -730,6 +737,25 @@ function renderFeed3d() {
             '</div>';
     }).join('');
 }
+
+// ── Cross-tab simulation sync ─────────────────────────────────────────────────
+(function() {
+    function onSimStateChange(simStarted) {
+        if (!scene3dInitialized) return;
+        if (simStarted && !animationPaused)  toggleAnimation();
+        if (!simStarted && animationPaused)  toggleAnimation();
+    }
+    if (typeof BroadcastChannel !== 'undefined') {
+        var bc = new BroadcastChannel('eyeways_sim');
+        bc.onmessage = function(e) {
+            if (!e.data || !e.data.type) return;
+            onSimStateChange(e.data.type === 'sim_started');
+        };
+    }
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'eyeways_sim_active') onSimStateChange(e.newValue === 'true');
+    });
+})();
 
 // ── 5-min countdown ──────────────────────────────────────────────────────────
 var countdown = 300;

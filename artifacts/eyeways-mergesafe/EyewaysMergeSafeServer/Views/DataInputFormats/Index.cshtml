@@ -326,6 +326,12 @@ var simTimer    = null;
 var simDelayTmr = null;
 var simTotal    = 0;
 var simLogItems = [];
+var eyewaysBroadcast = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('eyeways_sim') : null;
+
+function simBroadcast(type) {
+    if (eyewaysBroadcast) eyewaysBroadcast.postMessage({ type: type });
+    try { localStorage.setItem('eyeways_sim_active', type === 'sim_started' ? 'true' : 'false'); } catch(e) {}
+}
 
 function simFilterDropdowns() {
     var hwId = document.getElementById('simHighway').value;
@@ -368,6 +374,7 @@ function startSim() {
     document.getElementById('btnStartSim').style.display = 'none';
     document.getElementById('btnStopSim').style.display  = '';
     setSimStatus('pending', delay > 0 ? ('Starting in ' + delay/1000 + 's…') : 'Starting…');
+    simBroadcast('sim_started');
 
     function doPost() {
         var hwId     = document.getElementById('simHighway').value;
@@ -411,6 +418,7 @@ function stopSim() {
     document.getElementById('btnStartSim').style.display = '';
     document.getElementById('btnStopSim').style.display  = 'none';
     setSimStatus('stopped', 'Stopped · ' + simTotal + ' total posted');
+    simBroadcast('sim_stopped');
 }
 
 function setSimStatus(state, msg) {
