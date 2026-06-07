@@ -628,6 +628,14 @@ function initScene3D() {
         if (e.key === 'Escape') closeVehicleDetail();
     });
 
+    // Outside-page dismiss: clicking sidebar, header, or any element outside the canvas container
+    document.addEventListener('click', function(e) {
+        var panel = document.getElementById('vehicleDetailPanel');
+        if (!panel || panel.style.display === 'none') return;
+        var cont = document.getElementById('scene3dContainer');
+        if (cont && !cont.contains(e.target)) closeVehicleDetail();
+    }, true);
+
     window.addEventListener('resize', function() {
         if (!renderer3d) return;
         var W2 = container.clientWidth, H2 = container.clientHeight;
@@ -663,7 +671,8 @@ function spawnV(vSpec, fromEvent, zoneId, isSimulation, ev) {
         evHighwayId:  ev ? (ev.highwayId  || '') : '',
         evLatitude:   ev ? (ev.latitude   || null) : null,
         evLongitude:  ev ? (ev.longitude  || null) : null,
-        evCreatedDate:ev ? (ev.createdDate|| '') : ''
+        evCreatedDate:ev ? (ev.createdDate|| '') : '',
+        evZoneId:     ev ? (ev.zoneId     || '') : ''
     };
     scene3d.add(group);
     vehicles3d.push(group);
