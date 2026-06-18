@@ -1,0 +1,70 @@
+@model AirwaysMergeSafeServer.ViewModels.EventsViewModel
+@{ ViewData["Title"] = "Vehicle Events"; ViewBag.Highways = Model.Highways; ViewBag.SelectedHighwayId = Model.SelectedHighwayId; }
+
+<div class="mss-page-header">
+    <div><h2 class="mss-page-title">Vehicle Events</h2><p class="mss-page-sub">Live telemetry events — up to 100 most recent</p></div>
+    <div class="d-flex gap-2 align-items-center">
+        <select id="filterSel" class="form-select form-select-sm mss-hw-select" style="width:140px" onchange="applyFilter()">
+            <option value="all" selected="@(Model.FilterType=="all" ? "selected" : null)">All Types</option>
+            @foreach (var t in new[]{"detection","merge","conflict","speeding","fault"})
+            { <option value="@t" selected="@(Model.FilterType==t ? "selected" : null)">@t</option> }
+        </select>
+        <button class="btn btn-outline-secondary btn-sm" onclick="refreshFeed()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+    </div>
+</div>
+
+<div class="mss-card">
+    <div class="mss-card-body p-0" id="eventsTable">
+        <table class="table table-dark table-hover mb-0 small">
+            <thead><tr>
+                <th>Type</th><th>Zone</th><th>Vehicle</th><th>Speed</th><th>Lat</th><th>Lon</th><th>Time</th>
+            </tr></thead>
+            <tbody id="evBody">
+            @foreach (var ev in Model.Events)
+            {
+                <tr>
+                    <td><span class="mss-event-type mss-event--@ev.EventType">@ev.EventType.ToUpper()</span></td>
+                    <td class="font-monospace text-muted">@ev.ZoneId</td>
+                    <td class="font-monospace">@ev.VehicleId</td>
+                    <td>@(ev.SpeedMph.HasValue ? $"{ev.SpeedMph} mph" : "—")</td>
+                    <td class="text-muted">@(ev.Latitude?.ToString("F4") ?? "—")</td>
+                    <td class="text-muted">@(ev.Longitude?.ToString("F4") ?? "—")</td>
+                    <td class="font-monospace text-muted">@ev.CreatedDate.ToString("HH:mm:ss")</td>
+                </tr>
+            }
+            @if (!Model.Events.Any())
+            { <tr><td colspan="7" class="text-muted text-center py-3">No events found.</td></tr> }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var currentHighwayId = '@Model.SelectedHighwayId';
+function applyFilter() {
+    var f = document.getElementById('filterSel').value;
+    window.location.href = '/VehicleEvents?highwayId=' + encodeURIComponent(currentHighwayId) + '&filterType=' + f;
+}
+function refreshFeed() {
+    var f = document.getElementById('filterSel').value;
+    fetch('/VehicleEvents/Feed?highwayId=' + encodeURIComponent(currentHighwayId) + '&filterType=' + f + '&take=100')
+        .then(r => r.json())
+        .then(function(events) {
+            var tbody = document.getElementById('evBody');
+            if (!events.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center py-3">No events found.</td></tr>'; return; }
+            tbody.innerHTML = events.map(function(ev) {
+                return '<tr>' +
+                    '<td><span class="mss-event-type mss-event--' + ev.eventType + '">' + ev.eventType.toUpperCase() + '</span></td>' +
+                    '<td class="font-monospace text-muted">' + (ev.zoneId || '—') + '</td>' +
+                    '<td class="font-monospace">' + (ev.vehicleId || '—') + '</td>' +
+                    '<td>' + (ev.speedMph != null ? ev.speedMph + ' mph' : '—') + '</td>' +
+                    '<td class="text-muted">—</td><td class="text-muted">—</td>' +
+                    '<td class="font-monospace text-muted">' + new Date(ev.createdDate).toLocaleTimeString() + '</td>' +
+                    '</tr>';
+            }).join('');
+        });
+}
+setInterval(refreshFeed, 15000);
+</script>
+}

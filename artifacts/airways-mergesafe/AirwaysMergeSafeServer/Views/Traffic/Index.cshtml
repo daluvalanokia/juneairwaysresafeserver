@@ -1,0 +1,336 @@
+@model AirwaysMergeSafeServer.ViewModels.Traffic3DViewModel
+@{ ViewData["Title"] = "Traffic"; ViewBag.Highways = Model.Highways; ViewBag.SelectedHighwayId = Model.SelectedHighwayId; }
+@{
+    var zones   = Model.Zones;
+    var sensors = Model.Sensors;
+}
+
+<div class="mss-page-header">
+    <div><h2 class="mss-page-title">Traffic Visualization</h2><p class="mss-page-sub">Highway map with Leaflet 2D and Three.js Scene3D</p></div>
+    <div class="d-flex gap-2">
+        <button id="btnMap" class="btn btn-primary btn-sm" onclick="setMode('map')"><i class="bi bi-map me-1"></i>Map</button>
+        <button id="btn3d"  class="btn btn-outline-secondary btn-sm" onclick="setMode('3d')"><i class="bi bi-badge-3d me-1"></i>3D Scene</button>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-9">
+        <div id="mapPanel" class="mss-card">
+            <div class="mss-card-header d-flex justify-content-between">
+                <span><i class="bi bi-map me-1"></i> Highway Map</span>
+                <span class="text-muted small" id="mapRefreshTimer">Refreshes in 5:00</span>
+            </div>
+            <div id="leafletMap" style="height:520px;border-radius:0 0 12px 12px;"></div>
+        </div>
+
+        <div id="scene3dPanel" class="mss-card" style="display:none">
+            <div class="mss-card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-badge-3d me-1"></i> Scene3D — Three.js</span>
+                <a href="/Vehicles" class="btn btn-outline-secondary btn-sm"><i class="bi bi-car-front me-1"></i>Vehicle Registry</a>
+            </div>
+            <div id="scene3dContainer" style="width:100%;height:520px;border-radius:0 0 12px 12px;overflow:hidden;"></div>
+        </div>
+    </div>
+
+    <div class="col-lg-3">
+        <div class="mss-card mb-3">
+            <div class="mss-card-header"><i class="bi bi-info-circle me-1"></i> Zones</div>
+            <div class="mss-card-body p-0" style="max-height:160px;overflow-y:auto">
+                @foreach (var z in zones)
+                {
+                    <div class="mss-list-item d-flex justify-content-between align-items-center">
+                        <span class="small">@z.ZoneName</span>
+                        <span class="mss-badge mss-badge--@z.Status">@z.Status</span>
+                    </div>
+                }
+                @if (!zones.Any()) { <p class="text-muted small p-2">No zones.</p> }
+            </div>
+        </div>
+
+        <div class="mss-card mb-3">
+            <div class="mss-card-header"><i class="bi bi-sliders me-1"></i> Controls</div>
+            <div class="mss-card-body">
+                <label class="form-label small">Camera Angle</label>
+                <input type="range" class="form-range mb-2" id="camAngle" min="10" max="80" step="5" value="45" oninput="setCamAngle(this.value)" />
+                <label class="form-label small">Speed Multiplier</label>
+                <input type="range" class="form-range mb-2" id="speedMult" min="0.5" max="5" step="0.5" value="1" oninput="setSpeedMult(this.value)" />
+                <label class="form-label small">Vehicle Density</label>
+                <input type="range" class="form-range" id="density" min="3" max="30" step="1" value="10" oninput="setDensity(this.value)" />
+            </div>
+        </div>
+
+        <div class="mss-card">
+            <div class="mss-card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-activity me-1"></i> Traffic Feed</span>
+                <span class="mss-badge mss-badge--active" style="animation:pulse 1s infinite">LIVE</span>
+            </div>
+            <div class="mss-card-body p-0" id="trafficFeed" style="max-height:260px;overflow-y:auto">
+                <p class="text-muted small p-2">Switch to 3D Scene to start feed…</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script src="~/js/vehicleScene.js"></script>
+<script>
+var highwayId = '@(Model.SelectedHighwayId ?? "")';
+var sensorData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    sensors.Where(s => s.Latitude.HasValue && s.Longitude.HasValue)
+           .Select(s => new { s.DeviceName, s.DeviceType, s.Status, lat = s.Latitude, lon = s.Longitude })));
+var zoneData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    zones.Where(z => z.Latitude.HasValue && z.Longitude.HasValue)
+         .Select(z => new { z.ZoneName, z.Status, lat = z.Latitude, lon = z.Longitude, r = z.GeofenceRadius })));
+
+// ── Leaflet map ─────────────────────────────────────────────────────────────
+var mapCenter = zoneData.length > 0 ? [zoneData[0].lat, zoneData[0].lon] : [32.7767, -96.7970];
+var map = L.map('leafletMap').setView(mapCenter, 10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM, CARTO'}).addTo(map);
+sensorData.forEach(function(s) {
+    var color={camera:'#3b82f6',lidar:'#a855f7',radar:'#f59e0b','vehicle tag reader':'#22c55e'}[s.deviceType]||'#fff';
+    L.circleMarker([s.lat,s.lon],{radius:5,color:color,fillColor:color,fillOpacity:0.9})
+        .bindPopup('<b>'+s.deviceName+'</b><br>'+s.deviceType+'<br>'+s.status).addTo(map);
+});
+zoneData.forEach(function(z) {
+    var c=z.status==='fault'?'#ef4444':'#22c55e';
+    L.circle([z.lat,z.lon],{radius:z.r,color:c,fillColor:c,fillOpacity:0.08}).addTo(map);
+    L.circleMarker([z.lat,z.lon],{radius:9,color:c,fillColor:c,fillOpacity:0.9}).bindPopup('<b>'+z.zoneName+'</b><br>'+z.status).addTo(map);
+});
+
+loadSegments();
+function loadSegments() {
+    fetch('/Traffic/GetSegments?highwayId=' + encodeURIComponent(highwayId))
+        .then(function(r) { return r.json(); })
+        .then(renderSegFeed)
+        .catch(function(){ renderSegFeed({segments:[]}); });
+}
+function renderSegFeed(data) {
+    var segs = data.segments || [];
+    if (!segs.length) return;
+    var cm = {free:'#22c55e', moderate:'#f59e0b', heavy:'#ef4444'};
+    var feed = document.getElementById('trafficFeed');
+    feed.innerHTML = segs.map(function(s) {
+        var c = cm[s.congestion] || '#64748b';
+        return '<div class="mss-list-item d-flex justify-content-between align-items-center">' +
+            '<span class="small fw-semibold" style="color:'+c+'">'+s.name+'</span>' +
+            '<span class="small text-muted">'+s.speedMph+' mph</span></div>';
+    }).join('');
+}
+
+// ── Mode toggle ─────────────────────────────────────────────────────────────
+var scene3dRunning = false;
+function setMode(m) {
+    document.getElementById('mapPanel').style.display     = m==='map'?'':'none';
+    document.getElementById('scene3dPanel').style.display = m==='3d' ?'':'none';
+    document.getElementById('btnMap').className = m==='map'?'btn btn-primary btn-sm':'btn btn-outline-secondary btn-sm';
+    document.getElementById('btn3d').className  = m==='3d' ?'btn btn-primary btn-sm':'btn btn-outline-secondary btn-sm';
+    if (m==='3d' && !scene3dRunning) initScene3D();
+}
+
+// ── Three.js Scene3D ─────────────────────────────────────────────────────────
+var speedMult = 1, density = 10, camAngleVal = 45;
+var renderer3d, camera3d, scene3d, vehicles3d = [];
+
+function setCamAngle(v) {
+    camAngleVal = parseFloat(v);
+    if (camera3d) {
+        var d = 35, rad = camAngleVal * Math.PI / 180;
+        camera3d.position.set(0, Math.sin(rad)*d, Math.cos(rad)*d);
+        camera3d.lookAt(0, 0, 0);
+    }
+}
+function setSpeedMult(v) { speedMult = parseFloat(v); }
+function setDensity(v)   { density   = parseInt(v); }
+
+function initScene3D() {
+    scene3dRunning = true;
+    var container = document.getElementById('scene3dContainer');
+    var W = container.clientWidth, H = container.clientHeight;
+
+    scene3d = new THREE.Scene();
+    scene3d.background = new THREE.Color(0x0a0f1a);
+    scene3d.fog = new THREE.FogExp2(0x0a0f1a, 0.018);
+
+    camera3d = new THREE.PerspectiveCamera(45, W/H, 0.1, 500);
+    camera3d.position.set(0, 22, 28);
+    camera3d.lookAt(0, 0, 0);
+
+    renderer3d = new THREE.WebGLRenderer({ antialias: true });
+    renderer3d.setSize(W, H);
+    renderer3d.setPixelRatio(window.devicePixelRatio);
+    renderer3d.shadowMap.enabled = true;
+    container.appendChild(renderer3d.domElement);
+
+    scene3d.add(new THREE.AmbientLight(0x334466, 2));
+    var dir = new THREE.DirectionalLight(0x8899ff, 2.5);
+    dir.position.set(10, 20, 10); dir.castShadow = true;
+    scene3d.add(dir);
+
+    // Ground
+    var gnd = new THREE.Mesh(new THREE.PlaneGeometry(100,100),
+        new THREE.MeshLambertMaterial({color:0x050a12}));
+    gnd.rotation.x = -Math.PI/2; gnd.receiveShadow = true;
+    scene3d.add(gnd);
+
+    // Road
+    var road = new THREE.Mesh(new THREE.PlaneGeometry(14,80),
+        new THREE.MeshLambertMaterial({color:0x1a2035}));
+    road.rotation.x = -Math.PI/2; road.position.y = 0.02; road.receiveShadow = true;
+    scene3d.add(road);
+
+    // Median
+    var med = new THREE.Mesh(new THREE.PlaneGeometry(0.4,80),
+        new THREE.MeshLambertMaterial({color:0x2a3a55}));
+    med.rotation.x = -Math.PI/2; med.position.y = 0.025;
+    scene3d.add(med);
+
+    // Lane markers
+    for (var i = -35; i < 36; i += 6) {
+        [-5,-3,3,5].forEach(function(xl) {
+            var lm = new THREE.Mesh(new THREE.PlaneGeometry(0.15,3),
+                new THREE.MeshBasicMaterial({color: Math.abs(xl)===5?0xffffff:0xffff00}));
+            lm.rotation.x = -Math.PI/2; lm.position.set(xl, 0.03, i);
+            scene3d.add(lm);
+        });
+    }
+
+    // Curbs
+    [-7.2,7.2].forEach(function(cx) {
+        var curb = new THREE.Mesh(new THREE.BoxGeometry(0.25,0.12,80),
+            new THREE.MeshLambertMaterial({color:0x2c3a52}));
+        curb.position.set(cx, 0.06, 0);
+        scene3d.add(curb);
+    });
+
+    vehicles3d = [];
+    for (var vi = 0; vi < density; vi++) spawnV();
+    animate3d();
+    startEventPolling();
+
+    window.addEventListener('resize', function() {
+        if (!renderer3d) return;
+        var W2 = container.clientWidth, H2 = container.clientHeight;
+        renderer3d.setSize(W2, H2); camera3d.aspect = W2/H2; camera3d.updateProjectionMatrix();
+    });
+}
+
+// ── Vehicle spawning ─────────────────────────────────────────────────────────
+
+function spawnV(vSpec, fromEvent) {
+    if (!vSpec) vSpec = vehicleGetRandom(null);
+    var group = vehicleBuildMesh(vSpec);
+    var lane  = [-4,-2,2,4][Math.floor(Math.random()*4)];
+    group.position.set(lane, 0, (Math.random()*80)-40);
+    if (lane > 0) group.rotation.y = Math.PI;
+    group.userData = {
+        speed: (25+Math.random()*55)*0.012,
+        dir:   lane < 0 ? 1 : -1,
+        lane:  lane,
+        type:  vSpec.type,
+        make:  vSpec.make,
+        model: vSpec.model,
+        icon:  vSpec.icon,
+        fromEvent: fromEvent||false
+    };
+    scene3d.add(group);
+    vehicles3d.push(group);
+    return group;
+}
+
+// ── Animation loop ───────────────────────────────────────────────────────────
+
+function animate3d() {
+    requestAnimationFrame(animate3d);
+    vehicles3d.forEach(function(v) {
+        v.position.z += v.userData.dir * v.userData.speed * speedMult;
+        if (v.position.z >  42) { v.position.z = -42; pushFeed(v, false); }
+        if (v.position.z < -42) { v.position.z =  42; pushFeed(v, false); }
+    });
+    var ambient = vehicles3d.filter(function(v){ return !v.userData.fromEvent; });
+    while (ambient.length < density) {
+        var s = spawnV(null, false);
+        ambient.push(s);
+    }
+    while (vehicles3d.length > density + 20) scene3d.remove(vehicles3d.shift());
+    renderer3d.render(scene3d, camera3d);
+}
+
+// ── Live event polling ───────────────────────────────────────────────────────
+
+var lastPollTime = new Date().toISOString();
+var feedItems    = [];
+
+function startEventPolling() {
+    setInterval(pollLiveEvents, 3000);
+}
+
+function pollLiveEvents() {
+    fetch('/api/events/live?highwayId=' + encodeURIComponent(highwayId) +
+          '&since=' + encodeURIComponent(lastPollTime))
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+            if (!data.events || !data.events.length) return;
+            lastPollTime = data.serverTime;
+            data.events.forEach(function(ev) {
+                var spec = vehicleGetRandom(ev.vehicleType || null);
+                var grp  = spawnV(spec, true);
+                if (ev.speedMph) grp.userData.speed = ev.speedMph * 0.012;
+                pushFeed(grp, true, ev);
+            });
+        })
+        .catch(function(){});
+}
+
+// ── Feed rendering ───────────────────────────────────────────────────────────
+
+function pushFeed(v, fromInput, ev) {
+    var evType = (ev && ev.eventType) ? ev.eventType : 'detection';
+    var spd    = ev && ev.speedMph ? Math.round(ev.speedMph) : Math.round((25+Math.random()*55)*speedMult);
+    feedItems.unshift({
+        icon:      v.userData.icon  || '🚗',
+        make:      v.userData.make  || '',
+        model:     v.userData.model || '',
+        eventType: evType,
+        spd:       spd,
+        dir:       v.userData.lane < 0 ? 'SB' : 'NB',
+        time:      new Date().toLocaleTimeString(),
+        fromInput: fromInput || false
+    });
+    if (feedItems.length > 30) feedItems.length = 30;
+    renderFeedHtml();
+}
+
+function renderFeedHtml() {
+    var feed = document.getElementById('trafficFeed');
+    feed.innerHTML = feedItems.map(function(f) {
+        var ec = FEED_EVENT_COLORS[f.eventType] || '#64748b';
+        var inputTag = f.fromInput
+            ? '<span class="badge bg-warning text-dark ms-1" style="font-size:.58rem;vertical-align:middle">DATA INPUT</span>'
+            : '';
+        return '<div class="mss-list-item" style="padding:.35rem .75rem">' +
+            '<div class="d-flex justify-content-between align-items-center">' +
+            '<span style="font-size:.82rem">' + f.icon + ' <span class="fw-semibold">' + f.make + '</span> ' + f.model + inputTag + '</span>' +
+            '<span class="font-monospace text-muted" style="font-size:.6rem">' + f.time + '</span>' +
+            '</div>' +
+            '<div class="d-flex gap-2 align-items-center mt-1">' +
+            '<span class="fw-bold" style="color:' + ec + ';font-size:.74rem">' + f.eventType.toUpperCase() + '</span>' +
+            '<span class="text-muted" style="font-size:.74rem">' + f.dir + ' · ' + f.spd + ' mph</span>' +
+            '</div>' +
+            '</div>';
+    }).join('');
+}
+
+// ── 5-min countdown ──────────────────────────────────────────────────────────
+var countdown = 300;
+setInterval(function() {
+    countdown--;
+    if (countdown <= 0) { countdown = 300; loadSegments(); }
+    var m = Math.floor(countdown/60), s = countdown%60;
+    var el = document.getElementById('mapRefreshTimer');
+    if (el) el.textContent = 'Refreshes in ' + m + ':' + (s<10?'0':'') + s;
+}, 1000);
+</script>
+}

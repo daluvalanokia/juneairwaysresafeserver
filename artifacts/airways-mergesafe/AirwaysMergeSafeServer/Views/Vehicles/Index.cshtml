@@ -1,0 +1,162 @@
+@model IReadOnlyList<AirwaysMergeSafeServer.Services.VehicleSpec>
+@{ ViewData["Title"] = "Vehicle Registry"; }
+
+<div class="mss-page-header">
+    <div>
+        <h2 class="mss-page-title">Vehicle Registry</h2>
+        <p class="mss-page-sub">@Model.Count automobile makes &amp; models — icons and dimensions used by the 3D traffic animation</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        @foreach (var t in new[]{"all","sedan","suv","truck","motorcycle","van"})
+        {
+            <button class="btn btn-sm @(t=="all"?"btn-primary":"btn-outline-secondary") type-filter-btn" data-type="@t">
+                @(t == "all" ? "All Types" : char.ToUpper(t[0]) + t.Substring(1))
+            </button>
+        }
+    </div>
+</div>
+
+<div class="mss-card mb-3">
+    <div class="mss-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-car-front me-1"></i> Make &amp; Model Reference</span>
+        <span class="text-muted small" id="countLabel">Showing @Model.Count vehicles</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover table-sm mb-0" id="vehicleTable">
+            <thead style="position:sticky;top:0;z-index:1;background:#0f1624;border-bottom:1px solid rgba(255,255,255,0.08)">
+                <tr>
+                    <th class="ps-3 text-center" style="width:3.5rem">Icon</th>
+                    <th>Make</th>
+                    <th>Model</th>
+                    <th style="width:8rem">Type</th>
+                    <th style="width:7rem">Size</th>
+                    <th>Color Palette</th>
+                    <th class="text-end pe-3" style="width:12rem">Dimensions L×W×H (m)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var v in Model)
+                {
+                    var typeCss = v.Type switch {
+                        "sedan"      => "bg-primary",
+                        "suv"        => "bg-success",
+                        "truck"      => "bg-danger",
+                        "motorcycle" => "bg-info text-dark",
+                        "van"        => "bg-secondary",
+                        _            => "bg-dark"
+                    };
+                    var sizeCss = v.Size switch {
+                        "small"  => "#22c55e",
+                        "medium" => "#f59e0b",
+                        "large"  => "#ef4444",
+                        _        => "#94a3b8"
+                    };
+                    <tr class="vehicle-row" data-type="@v.Type">
+                        <td class="ps-3 text-center align-middle" style="font-size:1.55rem;line-height:1">@v.Icon</td>
+                        <td class="fw-semibold align-middle">@v.Make</td>
+                        <td class="align-middle">@v.Model</td>
+                        <td class="align-middle">
+                            <span class="badge @typeCss rounded-pill" style="font-size:.7rem;text-transform:capitalize">@v.Type</span>
+                        </td>
+                        <td class="align-middle">
+                            <span class="badge rounded-pill" style="background:@sizeCss;color:#fff;font-size:.7rem">@v.Size</span>
+                        </td>
+                        <td class="align-middle">
+                            <div class="d-flex gap-1 flex-wrap align-items-center">
+                                @foreach (var c in v.Colors)
+                                {
+                                    <span title="@c"
+                                          style="display:inline-block;width:20px;height:20px;border-radius:50%;background:@c;
+                                                 border:1.5px solid rgba(255,255,255,0.18);cursor:default;flex-shrink:0"
+                                          class="color-swatch"></span>
+                                }
+                            </div>
+                        </td>
+                        <td class="text-end pe-3 font-monospace small align-middle" style="color:#94a3b8">
+                            @v.LengthM.ToString("F1")&thinsp;×&thinsp;@v.WidthM.ToString("F1")&thinsp;×&thinsp;@v.HeightM.ToString("F1")
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="row g-3">
+    @{
+        var byType = Model.GroupBy(v => v.Type)
+                         .OrderBy(g => new[]{"sedan","suv","truck","motorcycle","van"}.ToList().IndexOf(g.Key))
+                         .ToList();
+        var typeIcons = new Dictionary<string,string> {
+            {"sedan","🚗"}, {"suv","🚙"}, {"truck","🛻"}, {"motorcycle","🏍"}, {"van","🚐"}
+        };
+        var typeCounts = byType.ToDictionary(g => g.Key, g => g.Count());
+    }
+    @foreach (var grp in byType)
+    {
+        var ico = typeIcons.GetValueOrDefault(grp.Key, "🚘");
+        var cssClass = grp.Key switch {
+            "sedan"      => "bg-primary",
+            "suv"        => "bg-success",
+            "truck"      => "bg-danger",
+            "motorcycle" => "bg-info text-dark",
+            "van"        => "bg-secondary",
+            _            => "bg-dark"
+        };
+        <div class="col-6 col-md-4 col-lg-2">
+            <div class="mss-card text-center py-3 type-summary-card" data-type="@grp.Key" style="cursor:pointer">
+                <div style="font-size:2.4rem;line-height:1.1">@ico</div>
+                <div class="fw-semibold mt-2" style="text-transform:capitalize">@grp.Key</div>
+                <div class="mt-1">
+                    <span class="badge @cssClass" style="font-size:.72rem">@grp.Count() models</span>
+                </div>
+                <div class="text-muted mt-1" style="font-size:.7rem">
+                    @string.Join(" · ", grp.Select(v => v.Size).Distinct().OrderBy(s => s))
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var filterBtns = document.querySelectorAll('.type-filter-btn');
+    var rows       = document.querySelectorAll('.vehicle-row');
+    var countLabel = document.getElementById('countLabel');
+    var cards      = document.querySelectorAll('.type-summary-card');
+
+    function applyFilter(t) {
+        filterBtns.forEach(function (b) {
+            b.classList.toggle('btn-primary',          b.dataset.type === t);
+            b.classList.toggle('btn-outline-secondary', b.dataset.type !== t);
+        });
+        var visible = 0;
+        rows.forEach(function (r) {
+            var show = t === 'all' || r.dataset.type === t;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        countLabel.textContent = 'Showing ' + visible + ' vehicle' + (visible !== 1 ? 's' : '');
+    }
+
+    filterBtns.forEach(function (b) {
+        b.addEventListener('click', function () { applyFilter(this.dataset.type); });
+    });
+
+    cards.forEach(function (c) {
+        c.addEventListener('click', function () { applyFilter(this.dataset.type); });
+        c.addEventListener('mouseenter', function () { this.style.borderColor = 'rgba(59,130,246,.5)'; });
+        c.addEventListener('mouseleave', function () { this.style.borderColor = ''; });
+    });
+
+    document.querySelectorAll('.color-swatch').forEach(function (s) {
+        s.addEventListener('mouseenter', function () {
+            this.style.transform = 'scale(1.35)';
+            this.style.transition = 'transform .15s';
+        });
+        s.addEventListener('mouseleave', function () { this.style.transform = ''; });
+    });
+})();
+</script>
+}

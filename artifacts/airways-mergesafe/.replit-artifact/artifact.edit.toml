@@ -1,0 +1,20 @@
+kind = "web"
+previewPath = "/airways-mergesafe"
+title = "AirwaysMergeSafeServer"
+version = "1.0.0"
+
+[[services]]
+localPort = 5000
+name = "AirwaysMergeSafeServer"
+paths = ["/airways-mergesafe"]
+
+[services.development]
+run = "PORT=5000 dotnet run --project artifacts/airways-mergesafe/AirwaysMergeSafeServer/AirwaysMergeSafeServer.csproj"
+
+[services.production]
+
+[services.production.run]
+args = ["dotnet", "artifacts/airways-mergesafe/AirwaysMergeSafeServer/bin/Release/net8.0/AirwaysMergeSafeServer.dll"]
+
+[services.production.run.env]
+PORT = "5000"
