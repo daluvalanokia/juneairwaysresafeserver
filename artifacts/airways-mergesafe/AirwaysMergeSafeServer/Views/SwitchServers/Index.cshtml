@@ -41,7 +41,7 @@
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-secondary btn-sm flex-fill"
-                        onclick="openEdit(@s.Id,'@s.ServerName','@s.ServerId','@(s.ZoneId ?? "")','@s.HighwayId','@(s.IpAddress ?? "")',@s.Port,'@s.Status','@(s.FirmwareVersion ?? "")')"
+                        onclick="openEdit(@s.Id,'@s.ServerName','@s.ServerId','@(s.ZoneId ?? "")','@s.HighwayId','@(s.IpAddress ?? "")',@s.Port,'@s.Status','@(s.FirmwareVersion ?? "")','@(s.GpsLocation ?? "")')"
                         data-bs-toggle="modal" data-bs-target="#serverModal">
                         <i class="bi bi-pencil"></i> Edit
                     </button>
@@ -83,6 +83,11 @@
                         { <option value="@st">@st</option> }
                     </select>
                 </div>
+                <div class="col-12">
+                    <label class="form-label small">Lat/Lon Location of Server <span class="text-muted">(, delimiter)</span></label>
+                    <input type="text" name="GpsLocation" id="s_gps" class="form-control font-monospace"
+                           placeholder="32.7767, -96.9970" maxlength="60" />
+                </div>
             </div>
         </form>
       </div>
@@ -122,13 +127,13 @@ function startBarcodeScan(target) {
 function openNew() {
     document.getElementById('serverModalTitle').textContent = 'Add Switch Server';
     document.getElementById('serverForm').action = '/SwitchServers/Create';
-    ['s_id','s_name','s_sid','s_zone','s_ip','s_fw'].forEach(id => document.getElementById(id).value = '');
+    ['s_id','s_name','s_sid','s_zone','s_ip','s_fw','s_gps'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('s_id').value = 0;
     document.getElementById('s_port').value = 8080;
     document.getElementById('s_status').value = 'online';
     document.getElementById('s_hw').value = '@Model.SelectedHighwayId';
 }
-function openEdit(id,name,sid,zone,hw,ip,port,status,fw) {
+function openEdit(id,name,sid,zone,hw,ip,port,status,fw,gps) {
     document.getElementById('serverModalTitle').textContent = 'Edit Switch Server';
     document.getElementById('serverForm').action = '/SwitchServers/Edit';
     document.getElementById('s_id').value = id;
@@ -140,6 +145,7 @@ function openEdit(id,name,sid,zone,hw,ip,port,status,fw) {
     document.getElementById('s_port').value = port;
     document.getElementById('s_status').value = status;
     document.getElementById('s_fw').value = fw;
+    document.getElementById('s_gps').value = gps || '';
 }
 
 function ajaxCrudSubmit(formId, modalId) {

@@ -106,6 +106,7 @@ try
             var guards = new[]
             {
                 // Altitude fields (20260620000000_AddAltitudeFields)
+                "ALTER TABLE \"SwitchServers\" ADD COLUMN IF NOT EXISTS \"GpsLocation\" VARCHAR(60)",
                 "ALTER TABLE \"SwitchServers\" ADD COLUMN IF NOT EXISTS \"AltitudeMinMeters\" DOUBLE PRECISION",
                 "ALTER TABLE \"SwitchServers\" ADD COLUMN IF NOT EXISTS \"AltitudeMaxMeters\" DOUBLE PRECISION",
                 "ALTER TABLE \"SwitchServers\" ADD COLUMN IF NOT EXISTS \"AltitudeWidthMeters\" DOUBLE PRECISION",

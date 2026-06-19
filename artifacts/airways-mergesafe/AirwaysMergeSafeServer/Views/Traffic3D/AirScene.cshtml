@@ -54,7 +54,7 @@
         <small class="text-muted">Altitude corridor bands · Perspective · Side/Elevation · Top/Plan</small>
     </div>
     <div class="d-flex gap-2 align-items-center flex-wrap">
-        <select class="form-select form-select-sm" style="width:210px"
+        <select class="form-select form-select-sm" style="width:180px"
                 onchange="location.href='/Traffic3D/AirScene?highwayId='+this.value">
             @foreach (var h in Model.Highways)
             {
@@ -62,6 +62,22 @@
                 { <option value="@h.HighwayId" selected>@h.Name</option> }
                 else
                 { <option value="@h.HighwayId">@h.Name</option> }
+            }
+        </select>
+        <!-- Zone dropdown -->
+        <select id="airZoneSel" class="form-select form-select-sm" style="width:160px"
+                onchange="airZoneChanged()">
+            @foreach (var z in Model.Zones)
+            {
+                <option value="@z.ZoneId">@z.ZoneName</option>
+            }
+        </select>
+        <!-- Switch Server dropdown -->
+        <select id="airServerSel" class="form-select form-select-sm" style="width:180px"
+                onchange="airServerChanged()">
+            @foreach (var s in Model.SwitchServers)
+            {
+                <option value="@s.ServerId" data-zone="@(s.ZoneId ?? "")">@s.ServerName</option>
             }
         </select>
         <!-- Domain filter -->
@@ -171,6 +187,52 @@ const HW        = '@hw';
 // ── Data from C# model ────────────────────────────────────────────────
 const SERVERS = @Html.Raw(serversJson);
 const ZONES   = @Html.Raw(zonesJson);
+
+// ── Zone / Server dropdown state ──────────────────────────────────────
+var selectedZoneId   = (function(){
+    var sel = document.getElementById('airZoneSel');
+    return sel && sel.options.length ? sel.options[0].value : '';
+})();
+var selectedServerId = (function(){
+    var opts = document.querySelectorAll('#airServerSel option');
+    if (!opts.length) return '';
+    // prefer first server that belongs to selectedZoneId
+    for (var i=0;i<opts.length;i++){
+        if (opts[i].dataset.zone === selectedZoneId) { opts[i].selected = true; return opts[i].value; }
+    }
+    return opts[0].value;
+})();
+
+function airZoneChanged() {
+    selectedZoneId = document.getElementById('airZoneSel').value;
+    // refilter server dropdown to only show servers in this zone
+    var srvSel = document.getElementById('airServerSel');
+    var all    = srvSel.querySelectorAll('option');
+    var first  = '';
+    all.forEach(function(o){
+        var match = !selectedZoneId || o.dataset.zone === selectedZoneId;
+        o.style.display = match ? '' : 'none';
+        if (match && !first) { first = o.value; }
+    });
+    srvSel.value = first;
+    selectedServerId = first;
+    airHighlightCorridors();
+}
+
+function airServerChanged() {
+    selectedServerId = document.getElementById('airServerSel').value;
+    airHighlightCorridors();
+}
+
+function airHighlightCorridors() {
+    // Re-tint corridor meshes: selected server gets full opacity, others dim
+    if (!window._corridorMeshes) return;
+    window._corridorMeshes.forEach(function(obj){
+        var isSel = !selectedServerId || obj.serverId === selectedServerId;
+        obj.mesh.material.opacity = isSel ? 0.22 : 0.06;
+        obj.mesh.material.wireframe = isSel;
+    });
+}
 
 // ── Band colour palette (golden-angle hue spacing) ────────────────────
 function bandHsl(i) { return `hsl(${(i * 137.508) % 360}, 68%, 55%)`; }
@@ -286,6 +348,8 @@ const NUM_BANDS   = SERVERS.length;
 const CORRIDOR_Z  = 300;   // depth of the corridor along Z
 const CORRIDOR_SEP = 14;   // X-separation between adjacent corridors
 
+window._corridorMeshes = [];   // for airHighlightCorridors()
+
 SERVERS.forEach((s, i) => {
     const h    = Math.max(1, (s.altMax - s.altMin)) * ALT_SCALE;
     const midY = (s.altMin + s.altMax) / 2 * ALT_SCALE;
@@ -301,6 +365,9 @@ SERVERS.forEach((s, i) => {
     const fill = new THREE.Mesh(fillGeo, fillMat);
     fill.position.set(xOff, midY, 0);
     scene.add(fill);
+
+    // Track for zone/server highlighting
+    window._corridorMeshes.push({ serverId: s.serverId, zoneId: s.zoneId, mesh: fill });
 
     // Wireframe edges for clear corridor boundaries
     const edgeMat = new THREE.LineBasicMaterial({ color: col, opacity: 0.55, transparent: true });

@@ -8,8 +8,8 @@
         ("tracker",   "Tag Trackers",     "text-purple"),
     ("airflycar", "AirFlyCar",        "text-warning"),
     };
-    var allConfigs   = Model.PhysicalConfigs.Concat(Model.SatelliteConfigs).Concat(Model.TelecomConfigs).Concat(Model.TrackerConfigs).ToList();
-    var commonFields = new[]{"vehicle_id","timestamp","speed_mph","latitude","longitude","direction","lane","vehicle_type","event_type","zone_id","highway_id","signal_strength","altitude_ft","heading"};
+    var allConfigs   = Model.PhysicalConfigs.Concat(Model.SatelliteConfigs).Concat(Model.TelecomConfigs).Concat(Model.TrackerConfigs).Concat(Model.AirFlyCarConfigs).ToList();
+    var commonFields = new[]{"vehicle_id","timestamp","speed_mph","latitude","longitude","direction","lane","vehicle_type","event_type","zone_id","highway_id","signal_strength","altitude_ft","heading","aircar"};
     var shown = Model.ActiveTab switch {
         "satellite"  => Model.SatelliteConfigs,
         "telecom"    => Model.TelecomConfigs,

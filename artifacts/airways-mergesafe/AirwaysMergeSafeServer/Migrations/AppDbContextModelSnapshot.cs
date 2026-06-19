@@ -121,6 +121,7 @@ namespace AirwaysMergeSafeServer.Migrations
                 b.Property<double?>("AltitudeMinMeters").HasColumnType("REAL");
                 b.Property<double?>("AltitudeWidthMeters").HasColumnType("REAL");
                 b.Property<double>("CpuPercent").HasColumnType("REAL");
+                b.Property<string>("GpsLocation").HasMaxLength(60).HasColumnType("TEXT");
                 b.Property<DateTime>("CreatedDate").HasColumnType("TEXT");
                 b.Property<string>("FirmwareVersion").HasMaxLength(20).HasColumnType("TEXT");
                 b.Property<string>("HighwayId").IsRequired().HasMaxLength(50).HasColumnType("TEXT");

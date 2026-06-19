@@ -206,6 +206,7 @@ public class InputPayloadService
                 "zone_id"              => $"ZONE-{rng.Next(1, 10):D3}",
                 "highway_id"           => "I20-TX",
                 "event_type"           => eventType,
+                "aircar"               => rng.NextDouble() >= 0.5 ? "Y" : "N",
                 _                      => $"val_{rng.Next(100, 999)}"
             };
         }

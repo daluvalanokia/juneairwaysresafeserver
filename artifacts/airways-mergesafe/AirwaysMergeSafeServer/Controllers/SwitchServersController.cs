@@ -29,7 +29,7 @@ public class SwitchServersController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("ServerName,ServerId,ZoneId,HighwayId,IpAddress,Port,Status,FirmwareVersion,UptimeSeconds,CpuPercent,MemoryPercent,LastHeartbeat,CreatedDate,AltitudeMinMeters,AltitudeMaxMeters,AltitudeWidthMeters")]
+        [Bind("ServerName,ServerId,ZoneId,HighwayId,IpAddress,Port,Status,FirmwareVersion,UptimeSeconds,CpuPercent,MemoryPercent,LastHeartbeat,CreatedDate,AltitudeMinMeters,AltitudeMaxMeters,AltitudeWidthMeters,GpsLocation")]
         SwitchServer model)
     {
         if (!ModelState.IsValid) // C4 FIX
@@ -45,7 +45,7 @@ public class SwitchServersController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
-        [Bind("Id,ServerName,ServerId,ZoneId,HighwayId,IpAddress,Port,Status,FirmwareVersion,UptimeSeconds,CpuPercent,MemoryPercent,LastHeartbeat,CreatedDate,AltitudeMinMeters,AltitudeMaxMeters,AltitudeWidthMeters")]
+        [Bind("Id,ServerName,ServerId,ZoneId,HighwayId,IpAddress,Port,Status,FirmwareVersion,UptimeSeconds,CpuPercent,MemoryPercent,LastHeartbeat,CreatedDate,AltitudeMinMeters,AltitudeMaxMeters,AltitudeWidthMeters,GpsLocation")]
         SwitchServer model)
     {
         if (!ModelState.IsValid) // C4 FIX

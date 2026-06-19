@@ -22,5 +22,6 @@ public class SwitchServer
     public double? AltitudeMinMeters { get; set; }
     public double? AltitudeMaxMeters { get; set; }
     public double? AltitudeWidthMeters { get; set; }
+    [MaxLength(60)] public string? GpsLocation { get; set; }
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 }
