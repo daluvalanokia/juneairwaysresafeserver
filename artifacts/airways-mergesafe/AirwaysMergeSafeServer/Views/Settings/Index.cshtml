@@ -101,6 +101,130 @@
     </div>
 </div>
 
+<div class="mss-card mb-4">
+    <div class="mss-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-speedometer2 me-1"></i> 3D Scene Speed Alerts</span>
+        @if (TempData["AlertSaved"] != null)
+        { <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Saved</span> }
+    </div>
+    <div class="mss-card-body">
+        <p class="text-muted small mb-3">
+            Configure how the <strong class="text-white">Top / Plan</strong> panel in AirScene colors
+            vehicle markers by speed tier. Changes take effect on the next AirScene page load.
+        </p>
+        @{
+            var alertRaw = Model.AirSceneAlertsJson;
+            var alertObj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(alertRaw)
+                           ?? new();
+            int    sbl        = alertObj.TryGetValue("speedBandLimit",  out var v1) ? v1.GetInt32()    : 5;
+            string pat        = alertObj.TryGetValue("defaultPattern",   out var v2) ? v2.GetString()! : "circles";
+            bool   pco        = alertObj.TryGetValue("prevColorOverlay", out var v3) && v3.GetBoolean();
+            string safeLabel  = alertObj.TryGetValue("safeLabel",        out var v4) ? v4.GetString()! : "Safe Speed";
+            string safeColor  = alertObj.TryGetValue("safeColor",        out var v5) ? v5.GetString()! : "#22c55e";
+            int    safeBands  = alertObj.TryGetValue("safeBands",        out var v6) ? v6.GetInt32()   : 1;
+            string warnLabel  = alertObj.TryGetValue("warningLabel",     out var v7) ? v7.GetString()! : "Warning";
+            string warnColor  = alertObj.TryGetValue("warningColor",     out var v8) ? v8.GetString()! : "#f59e0b";
+            int    warnBands  = alertObj.TryGetValue("warningBands",     out var v9) ? v9.GetInt32()   : 2;
+            string ovLabel    = alertObj.TryGetValue("overspeedLabel",   out var va) ? va.GetString()! : "Overspeed";
+            string ovColor    = alertObj.TryGetValue("overspeedColor",   out var vb) ? vb.GetString()! : "#ef4444";
+            int    ovBands    = alertObj.TryGetValue("overspeedBands",   out var vc) ? vc.GetInt32()   : 4;
+        }
+        <form method="post" asp-action="SaveAirSceneAlerts">
+            @Html.AntiForgeryToken()
+            <div class="row g-3 mb-3">
+                <div class="col-sm-4">
+                    <label class="form-label small fw-semibold">Speed band limit (mph)</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" name="speedBandLimit" class="form-control font-monospace"
+                               min="1" max="999" value="@sbl" />
+                        <span class="input-group-text text-muted">mph</span>
+                    </div>
+                    <div class="form-text text-muted" style="font-size:.68rem">Vehicles below this speed are in the Safe tier.</div>
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label small fw-semibold">Default pattern</label>
+                    <select name="defaultPattern" class="form-select form-select-sm">
+                        @if (pat == "squares")
+                        {
+                            <option value="circles">Circles (rings)</option>
+                            <option value="squares" selected>Squares (outlines)</option>
+                        }
+                        else
+                        {
+                            <option value="circles" selected>Circles (rings)</option>
+                            <option value="squares">Squares (outlines)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-4 d-flex align-items-end">
+                    <div class="form-check">
+                        <input type="checkbox" name="prevColorOverlay" id="pcoChk" class="form-check-input"
+                               value="true" @(pco ? "checked" : "") />
+                        <label class="form-check-label small" for="pcoChk">Previous color overlay</label>
+                        <div class="form-text text-muted" style="font-size:.68rem">Show safe marker underneath warning/overspeed bands.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive mb-3">
+                <table class="table table-dark table-sm mb-0 small">
+                    <thead>
+                        <tr>
+                            <th style="width:22%">Tier</th>
+                            <th style="width:30%">Label</th>
+                            <th style="width:22%">Color</th>
+                            <th style="width:26%">Band count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge" style="background:#22c55e;color:#000">Safe</span></td>
+                            <td><input type="text" name="safeLabel" class="form-control form-control-sm" value="@safeLabel" /></td>
+                            <td>
+                                <div class="d-flex gap-1 align-items-center">
+                                    <input type="color" name="safeColor" class="form-control form-control-color form-control-sm" value="@safeColor" style="width:38px;height:30px;padding:2px" />
+                                    <code class="small" id="safeColorCode">@safeColor</code>
+                                </div>
+                            </td>
+                            <td><input type="number" name="safeBands" class="form-control form-control-sm font-monospace" min="1" max="10" value="@safeBands" /></td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge" style="background:#f59e0b;color:#000">Warning</span>
+                                <div class="text-muted" style="font-size:.65rem">+10–30 mph</div>
+                            </td>
+                            <td><input type="text" name="warningLabel" class="form-control form-control-sm" value="@warnLabel" /></td>
+                            <td>
+                                <div class="d-flex gap-1 align-items-center">
+                                    <input type="color" name="warningColor" class="form-control form-control-color form-control-sm" value="@warnColor" style="width:38px;height:30px;padding:2px" />
+                                    <code class="small" id="warnColorCode">@warnColor</code>
+                                </div>
+                            </td>
+                            <td><input type="number" name="warningBands" class="form-control form-control-sm font-monospace" min="1" max="10" value="@warnBands" /></td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-danger">Overspeed</span>
+                                <div class="text-muted" style="font-size:.65rem">+30+ mph</div>
+                            </td>
+                            <td><input type="text" name="overspeedLabel" class="form-control form-control-sm" value="@ovLabel" /></td>
+                            <td>
+                                <div class="d-flex gap-1 align-items-center">
+                                    <input type="color" name="overspeedColor" class="form-control form-control-color form-control-sm" value="@ovColor" style="width:38px;height:30px;padding:2px" />
+                                    <code class="small" id="ovColorCode">@ovColor</code>
+                                </div>
+                            </td>
+                            <td><input type="number" name="overspeedBands" class="form-control form-control-sm font-monospace" min="1" max="10" value="@ovBands" /></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-save me-1"></i>Save Speed Alert Settings
+            </button>
+        </form>
+    </div>
+</div>
+
 <div class="mss-card">
     <div class="mss-card-header"><i class="bi bi-sign-intersection me-1"></i> Highways</div>
     <div class="table-responsive">

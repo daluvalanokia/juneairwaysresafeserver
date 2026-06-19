@@ -109,16 +109,17 @@ public class Traffic3DController : Controller
 
         return View(new Traffic3DViewModel
         {
-            Highways          = highways,
-            SelectedHighwayId = highwayId,
-            Zones             = zones,
-            SwitchServers     = servers,
-            Sensors           = sensors,
-            TomTomApiKey      = _cfg["TomTomApiKey"],
-            RecentEventsJson  = JsonSerializer.Serialize(recentEvents),
-            GroundCount       = groundCount,
-            AirCount          = airCount,
-            CategoryBreakdown = catBreakdown
+            Highways           = highways,
+            SelectedHighwayId  = highwayId,
+            Zones              = zones,
+            SwitchServers      = servers,
+            Sensors            = sensors,
+            TomTomApiKey       = _cfg["TomTomApiKey"],
+            RecentEventsJson   = JsonSerializer.Serialize(recentEvents),
+            GroundCount        = groundCount,
+            AirCount           = airCount,
+            CategoryBreakdown  = catBreakdown,
+            AirSceneAlertsJson = AirwaysMergeSafeServer.Controllers.SettingsController.LoadAirSceneAlertsJson()
         });
     }
 

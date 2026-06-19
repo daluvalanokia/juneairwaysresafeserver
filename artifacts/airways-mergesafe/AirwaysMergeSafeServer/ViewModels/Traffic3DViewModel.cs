@@ -25,4 +25,7 @@ public class Traffic3DViewModel
 
     // Category breakdown: { "sedan":12, "air_urban":3, … }
     public Dictionary<string, int> CategoryBreakdown { get; set; } = new();
+
+    // Air Scene speed-alert configuration (JSON blob, passed to AirScene view)
+    public string AirSceneAlertsJson { get; set; } = "{}";
 }

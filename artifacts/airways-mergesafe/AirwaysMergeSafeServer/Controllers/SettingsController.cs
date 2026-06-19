@@ -22,6 +22,23 @@ public class SettingsController : Controller
     private static string PurgeSettingsPath =>
         Path.Combine(AppContext.BaseDirectory, "purgesettings.json");
 
+    private static string AirSceneAlertsPath =>
+        Path.Combine(AppContext.BaseDirectory, "airscenealerts.json");
+
+    private const string DefaultAirSceneAlertsJson =
+        """{"speedBandLimit":5,"defaultPattern":"circles","prevColorOverlay":false,"safeLabel":"Safe Speed","safeColor":"#22c55e","safeBands":1,"warningLabel":"Warning","warningColor":"#f59e0b","warningBands":2,"overspeedLabel":"Overspeed","overspeedColor":"#ef4444","overspeedBands":4}""";
+
+    public static string LoadAirSceneAlertsJson()
+    {
+        try
+        {
+            if (System.IO.File.Exists(AirSceneAlertsPath))
+                return System.IO.File.ReadAllText(AirSceneAlertsPath);
+        }
+        catch { }
+        return DefaultAirSceneAlertsJson;
+    }
+
     private static (int days, int count) LoadPurgeSettings()
     {
         try
@@ -43,11 +60,42 @@ public class SettingsController : Controller
         var (maxDays, maxCount) = LoadPurgeSettings();
         return View(new SettingsViewModel
         {
-            Highways      = await _db.Highways.AsNoTracking().OrderBy(h => h.Name).ToListAsync(),
-            TomTomApiKey  = _cfg["TomTomApiKey"] ?? "",
-            PurgeMaxDays  = maxDays,
-            PurgeMaxCount = maxCount
+            Highways           = await _db.Highways.AsNoTracking().OrderBy(h => h.Name).ToListAsync(),
+            TomTomApiKey       = _cfg["TomTomApiKey"] ?? "",
+            PurgeMaxDays       = maxDays,
+            PurgeMaxCount      = maxCount,
+            AirSceneAlertsJson = LoadAirSceneAlertsJson()
         });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public IActionResult SaveAirSceneAlerts(
+        int speedBandLimit, string defaultPattern, bool prevColorOverlay,
+        string safeLabel, string safeColor, int safeBands,
+        string warningLabel, string warningColor, int warningBands,
+        string overspeedLabel, string overspeedColor, int overspeedBands)
+    {
+        var userId = HttpContext.Session.GetString("UserId") ?? "unknown";
+        _logger.LogInformation("Security: Admin action — SaveAirSceneAlerts userId={UserId}", userId);
+
+        var json = JsonSerializer.Serialize(new {
+            speedBandLimit   = Math.Max(1, speedBandLimit),
+            defaultPattern   = defaultPattern is "circles" or "squares" ? defaultPattern : "circles",
+            prevColorOverlay,
+            safeLabel        = safeLabel     ?? "Safe Speed",
+            safeColor        = safeColor     ?? "#22c55e",
+            safeBands        = Math.Max(1, Math.Min(10, safeBands)),
+            warningLabel     = warningLabel  ?? "Warning",
+            warningColor     = warningColor  ?? "#f59e0b",
+            warningBands     = Math.Max(1, Math.Min(10, warningBands)),
+            overspeedLabel   = overspeedLabel ?? "Overspeed",
+            overspeedColor   = overspeedColor ?? "#ef4444",
+            overspeedBands   = Math.Max(1, Math.Min(10, overspeedBands))
+        }, new JsonSerializerOptions { WriteIndented = true });
+
+        System.IO.File.WriteAllText(AirSceneAlertsPath, json);
+        TempData["AlertSaved"] = "true";
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost, ValidateAntiForgeryToken]

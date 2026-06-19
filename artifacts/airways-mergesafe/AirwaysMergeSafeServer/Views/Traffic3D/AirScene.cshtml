@@ -188,6 +188,9 @@ const HW        = '@hw';
 const SERVERS = @Html.Raw(serversJson);
 const ZONES   = @Html.Raw(zonesJson);
 
+// ── Speed-alert settings from the Settings panel ─────────────────────
+const ALERT   = @Html.Raw(Model.AirSceneAlertsJson);
+
 // ── Zone / Server dropdown state ──────────────────────────────────────
 var selectedZoneId   = (function(){
     var sel = document.getElementById('airZoneSel');
@@ -430,33 +433,148 @@ camT.position.set(0, 600, 0);
 camT.up.set(0, 0, -1);
 camT.lookAt(0, 0, 0);
 
+// Layer assignments:  0 = common (grid, corridors, zones — all panels see this)
+//                     1 = perspective vehicles  (camP only)
+//                     2 = side/elevation vehicles (camS only)
+//                     3 = top/plan vehicles + speed overlays (camT only)
+camP.layers.enable(1);
+camS.layers.enable(2);
+camT.layers.enable(3);
+
 // ══════════════════════════════════════════════════════════════════════
-// Vehicle mesh management
+// Vehicle mesh management — three geometry layers, one per panel
 // ══════════════════════════════════════════════════════════════════════
-const vmeshes = [], vdata = [], conflictRings = [];
+const vehicleObjects = [];  // { meshP, meshS, meshT, overlays, altY, topY, isAir, vc, p }
+const conflictRings  = [];
 const raycaster = new THREE.Raycaster(), mouse2 = new THREE.Vector2();
 let activeDomFilter = 'all';
 
-function buildMesh(ev) {
-    const vc  = resolveClass(ev);
-    const sp  = getSpec(vc.category);
+function buildVehicle(ev) {
+    const vc    = resolveClass(ev);
+    const sp    = getSpec(vc.category);
     const isAir = vc.domain === 'air';
     const altY  = isAir ? (ev.altitudeMeters || 60) * ALT_SCALE : 0.3;
+    const topY  = isAir ? altY : 0.15;
     const col   = vc.conflictFlag ? '#ef4444' : (vc.color || sp.color);
-
-    const mat = new THREE.MeshPhongMaterial({
-        color: new THREE.Color(col), side: THREE.DoubleSide
-    });
-    const m = new THREE.Mesh(sp.geoP(), mat);
+    const c3    = new THREE.Color(col);
 
     const p = (ev.latitude && ev.longitude)
         ? norm(ev.latitude, ev.longitude)
         : { x: (Math.random() - 0.5) * 160, z: (Math.random() - 0.5) * 160 };
 
-    m.position.set(p.x, altY, p.z);
-    if (isAir) m.rotation.y = Math.random() * Math.PI * 2;
-    m.userData = { ev, vc, baseY: altY };
-    return m;
+    const ud = { ev, vc, baseY: altY };
+
+    // ── Perspective (layer 1): full 3-D shape ─────────────────────────
+    const meshP = new THREE.Mesh(sp.geoP(),
+        new THREE.MeshPhongMaterial({ color: c3, side: THREE.DoubleSide }));
+    meshP.position.set(p.x, altY, p.z);
+    if (isAir) meshP.rotation.y = Math.random() * Math.PI * 2;
+    meshP.userData = ud;
+    meshP.layers.set(1);
+
+    // ── Side / Elevation (layer 2): flat side-silhouette, category color
+    const meshS = new THREE.Mesh(sp.geoS(),
+        new THREE.MeshPhongMaterial({ color: c3, side: THREE.DoubleSide }));
+    meshS.position.set(p.x, altY, p.z);
+    meshS.rotation.y = Math.PI / 2;   // rotate into YZ plane for side camera
+    meshS.userData = ud;
+    meshS.layers.set(2);
+
+    // ── Top / Plan (layer 3): flat top-silhouette, category color ─────
+    const meshT = new THREE.Mesh(sp.geoT(),
+        new THREE.MeshPhongMaterial({ color: c3, side: THREE.DoubleSide }));
+    meshT.position.set(p.x, topY, p.z);
+    meshT.rotation.x = -Math.PI / 2;  // rotate into XZ plane for top camera
+    meshT.userData = { ev, vc, baseY: topY };
+    meshT.layers.set(3);
+
+    return { meshP, meshS, meshT, p, isAir, altY, topY, ev, vc };
+}
+
+function buildSpeedOverlay(ev, p, isAir, altY) {
+    const overlays = [];
+    const speed    = ev.speedMph  || 0;
+    const limit    = +(ALERT.speedBandLimit  ?? 5);
+    const delta    = speed - limit;
+    const pat      = ALERT.defaultPattern    || 'circles';
+    const useOvl   = ALERT.prevColorOverlay  !== false;
+
+    let color, numBands, showPattern;
+    if (delta < 0) {
+        color       = ALERT.safeColor      || '#22c55e';
+        numBands    = +(ALERT.safeBands    || 1);
+        showPattern = false;
+    } else if (delta < 10) {
+        color       = ALERT.safeColor      || '#22c55e';
+        numBands    = +(ALERT.safeBands    || 1);
+        showPattern = true;
+    } else if (delta < 30) {
+        color       = ALERT.warningColor   || '#f59e0b';
+        numBands    = +(ALERT.warningBands || 2);
+        showPattern = true;
+    } else {
+        color       = ALERT.overspeedColor  || '#ef4444';
+        numBands    = +(ALERT.overspeedBands || 4);
+        showPattern = true;
+    }
+
+    const baseY = isAir ? altY - 0.2 : 0.06;
+    const c3    = new THREE.Color(color);
+
+    // Base solid marker (always rendered for every vehicle in top view)
+    const baseGeo = pat === 'circles'
+        ? new THREE.CircleGeometry(1.8, 16)
+        : new THREE.PlaneGeometry(3.2, 3.2);
+    const baseMesh = new THREE.Mesh(baseGeo, new THREE.MeshBasicMaterial({
+        color: c3, transparent: true, opacity: 0.42,
+        side: THREE.DoubleSide, depthWrite: false
+    }));
+    baseMesh.rotation.x = -Math.PI / 2;
+    baseMesh.position.set(p.x, baseY, p.z);
+    baseMesh.layers.set(3);
+    overlays.push(baseMesh);
+
+    // Pattern band rings or square outlines when speed is at or over the limit
+    if (showPattern) {
+        for (let b = 0; b < numBands; b++) {
+            const r   = 2.4 + b * 2.0;
+            const opc = Math.max(0.15, 0.55 - b * 0.08);
+            if (pat === 'circles') {
+                const geo = new THREE.TorusGeometry(r, 0.28, 6, 32);
+                const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+                    color: c3, transparent: true, opacity: opc, depthWrite: false
+                }));
+                m.position.set(p.x, baseY + 0.06 * (b + 1), p.z);
+                m.rotation.x = -Math.PI / 2;
+                m.layers.set(3);
+                overlays.push(m);
+            } else {
+                const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(r * 2, 0.05, r * 2));
+                const m = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+                    color: c3, transparent: true, opacity: opc
+                }));
+                m.position.set(p.x, baseY + 0.06 * (b + 1), p.z);
+                m.layers.set(3);
+                overlays.push(m);
+            }
+        }
+        // prevColorOverlay: ghost safe-color disk under warning/overspeed bands
+        if (useOvl && delta >= 10) {
+            const sc3 = new THREE.Color(ALERT.safeColor || '#22c55e');
+            const og = pat === 'circles'
+                ? new THREE.CircleGeometry(1.2, 16)
+                : new THREE.PlaneGeometry(2.0, 2.0);
+            const om = new THREE.Mesh(og, new THREE.MeshBasicMaterial({
+                color: sc3, transparent: true, opacity: 0.22,
+                side: THREE.DoubleSide, depthWrite: false
+            }));
+            om.rotation.x = -Math.PI / 2;
+            om.position.set(p.x, baseY - 0.05, p.z);
+            om.layers.set(3);
+            overlays.push(om);
+        }
+    }
+    return overlays;
 }
 
 function buildConflictRing(pos) {
@@ -466,14 +584,24 @@ function buildConflictRing(pos) {
     );
     ring.rotation.x = Math.PI / 2;
     ring.position.copy(pos);
-    return ring;
+    return ring;  // layer 0 (default) — visible in all three panels
 }
 
 function clearScene() {
-    [...vmeshes, ...conflictRings].forEach(m => {
+    vehicleObjects.forEach(vo => {
+        [vo.meshP, vo.meshS, vo.meshT].forEach(m => {
+            scene.remove(m); m.geometry.dispose(); m.material.dispose();
+        });
+        vo.overlays.forEach(m => {
+            scene.remove(m); m.geometry.dispose();
+            if (m.material && m.material.dispose) m.material.dispose();
+        });
+    });
+    vehicleObjects.length = 0;
+    conflictRings.forEach(m => {
         scene.remove(m); m.geometry.dispose(); m.material.dispose();
     });
-    vmeshes.length = 0; vdata.length = 0; conflictRings.length = 0;
+    conflictRings.length = 0;
 }
 
 function loadEvents(evs) {
@@ -491,11 +619,18 @@ function loadEvents(evs) {
         if (activeDomFilter === 'ground' && vc.domain !== 'ground') return;
         if (activeDomFilter === 'air'    && vc.domain !== 'air')    return;
 
-        const m = buildMesh(ev);
-        scene.add(m); vmeshes.push(m); vdata.push({ ev, vc });
+        const vo      = buildVehicle(ev);
+        const overlays = buildSpeedOverlay(ev, vo.p, vo.isAir, vo.altY);
+        vo.overlays = overlays;
+
+        scene.add(vo.meshP);
+        scene.add(vo.meshS);
+        scene.add(vo.meshT);
+        overlays.forEach(m => scene.add(m));
+        vehicleObjects.push(vo);
 
         if (vc.conflictFlag) {
-            const ring = buildConflictRing(m.position);
+            const ring = buildConflictRing(vo.meshP.position);
             scene.add(ring); conflictRings.push(ring);
         }
         if (vc.domain === 'air') stA++; else stG++;
@@ -524,15 +659,15 @@ canvas.addEventListener('click', e => {
     const rx   = (e.clientX - rect.left) / rect.width;
     const ry   = (e.clientY - rect.top)  / rect.height;
 
-    let cam, lx;
-    if      (rx < SPLIT[1]) { cam = camP; lx = rx / SPLIT[1]; }
-    else if (rx < SPLIT[2]) { cam = camS; lx = (rx - SPLIT[1]) / (SPLIT[2] - SPLIT[1]); }
-    else                     { cam = camT; lx = (rx - SPLIT[2]) / (SPLIT[3] - SPLIT[2]); }
+    let cam, lx, pickArr;
+    if      (rx < SPLIT[1]) { cam = camP; lx = rx / SPLIT[1];                     pickArr = vehicleObjects.map(vo => vo.meshP); }
+    else if (rx < SPLIT[2]) { cam = camS; lx = (rx-SPLIT[1])/(SPLIT[2]-SPLIT[1]); pickArr = vehicleObjects.map(vo => vo.meshS); }
+    else                     { cam = camT; lx = (rx-SPLIT[2])/(SPLIT[3]-SPLIT[2]); pickArr = vehicleObjects.map(vo => vo.meshT); }
 
     mouse2.x =  lx * 2 - 1;
     mouse2.y = -ry * 2 + 1;
     raycaster.setFromCamera(mouse2, cam);
-    const hits = raycaster.intersectObjects(vmeshes, false);
+    const hits = raycaster.intersectObjects(pickArr, false);
     if (hits.length) showInspector(hits[0].object.userData);
 });
 
@@ -701,18 +836,26 @@ function animate() {
     camP.position.z = radius * Math.cos(theta) * Math.cos(phi);
     camP.lookAt(0, 15, 0);
 
-    // Animate vehicles
-    vmeshes.forEach((m, i) => {
-        const { vc, baseY } = m.userData;
-        if (vc.domain === 'air') {
-            m.position.y  = baseY + Math.sin(tick * 0.025 + i * 0.8) * 1.2;
-            m.rotation.y += 0.006;
+    // Animate vehicles — keep all three layer meshes in sync per vehicle
+    vehicleObjects.forEach((vo, i) => {
+        if (vo.vc.domain === 'air') {
+            const dy = Math.sin(tick * 0.025 + i * 0.8) * 1.2;
+            vo.meshP.position.y = vo.altY + dy;
+            vo.meshS.position.y = vo.altY + dy;
+            vo.meshT.position.y = vo.topY + dy;
+            vo.meshP.rotation.y += 0.006;
+            vo.meshT.rotation.z += 0.006;
+            const oy = vo.topY + dy - 0.2;
+            vo.overlays.forEach(m => { m.position.y = oy; });
         } else {
-            m.position.y  = baseY + Math.sin(tick * 0.04 + i) * 0.05;
+            const dy = Math.sin(tick * 0.04 + i) * 0.05;
+            vo.meshP.position.y = vo.altY + dy;
+            vo.meshS.position.y = vo.altY + dy;
+            vo.meshT.position.y = vo.topY + dy;
         }
     });
     conflictRings.forEach((r, i) => {
-        if (vmeshes[i]) r.position.y = vmeshes[i].position.y;
+        if (vehicleObjects[i]) r.position.y = vehicleObjects[i].meshP.position.y;
         r.rotation.z += 0.02;
     });
 
