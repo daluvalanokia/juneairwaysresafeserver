@@ -64,12 +64,21 @@ public class DataInputFormatsController : Controller
     public async Task<IActionResult> SimulationPost(
         string? highwayId, string? zoneId, string? serverId, string? sourceType)
     {
-        var type    = sourceType ?? "physical";
-        var fields  = new[] {
-            "vehicle_id","timestamp","speed_mph","latitude","longitude",
-            "altitude_m","direction","lane","vehicle_type","event_type",
-            "zone_id","highway_id","signal_strength"
-        };
+        var type   = sourceType ?? "physical";
+        var fields = string.Equals(type, "airflycar", StringComparison.OrdinalIgnoreCase)
+            ? new[] {
+                "vehicle_id","timestamp","latitude","longitude","altitude_m","speed_mph","heading",
+                "vehicle_type","flight_phase","vertical_rate_fpm","battery_soc","battery_temp_c",
+                "range_remaining_km","rotor_rpm","rotor_health","motor_temp_c","noise_db",
+                "corridor_id","corridor_deviation_m","conflict_flag","separation_m",
+                "passenger_count","destination_pad","pilot_id","icao_address","squawk",
+                "zone_id","highway_id","event_type","aircar","nic","nac_p"
+              }
+            : new[] {
+                "vehicle_id","timestamp","speed_mph","latitude","longitude",
+                "altitude_m","direction","lane","vehicle_type","event_type",
+                "zone_id","highway_id","signal_strength"
+              };
 
         var payload = _payloadSvc.Generate(type, fields);
         var label   = $"Simulation [{type.ToUpper()}] — {DateTime.UtcNow:HH:mm:ss}";
