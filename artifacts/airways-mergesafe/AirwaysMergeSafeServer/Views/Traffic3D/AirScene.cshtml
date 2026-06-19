@@ -224,11 +224,16 @@ function airZoneChanged() {
     srvSel.value = first;
     selectedServerId = first;
     airHighlightCorridors();
+    airZoomToVehicles(function(vo){ return vo.ev.zoneId === selectedZoneId; });
 }
 
 function airServerChanged() {
     selectedServerId = document.getElementById('airServerSel').value;
     airHighlightCorridors();
+    airZoomToVehicles(function(vo){
+        var b = findBand(vo.ev.altitudeMeters);
+        return b && b.server.serverId === selectedServerId;
+    });
 }
 
 function airHighlightCorridors() {
@@ -239,6 +244,40 @@ function airHighlightCorridors() {
         obj.mesh.material.opacity = isSel ? 0.22 : 0.06;
         obj.mesh.material.wireframe = isSel;
     });
+}
+
+// ── Camera proximity zoom — eases in toward vehicles matching a filter ──
+function airZoomToVehicles(matchFn) {
+    if (!vehicleObjects || !vehicleObjects.length) return;
+    var matched = vehicleObjects.filter(matchFn);
+    if (!matched.length) return;
+    var avgY = matched.reduce(function(s, vo){ return s + vo.altY; }, 0) / matched.length;
+    var startR = radius, startLY = lookTarget.y;
+    var targR  = Math.max(45, startR * 0.18);
+    var targLY = Math.max(5, avgY);
+    var frames = 0, phase = 'in';
+    var FIN = 70, FHOLD = 130, FOUT = 85;
+    airCamTween = function() {
+        var t, ease;
+        if (phase === 'in') {
+            frames++;
+            t = Math.min(1, frames / FIN);
+            ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+            radius       = startR  + (targR  - startR)  * ease;
+            lookTarget.y = startLY + (targLY - startLY) * ease;
+            if (frames >= FIN) { frames = 0; phase = 'hold'; }
+        } else if (phase === 'hold') {
+            frames++;
+            if (frames >= FHOLD) { frames = 0; phase = 'out'; }
+        } else {
+            frames++;
+            t = Math.min(1, frames / FOUT);
+            ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+            radius       = targR  + (startR  - targR)  * ease;
+            lookTarget.y = targLY + (startLY - targLY) * ease;
+            if (frames >= FOUT) { airCamTween = null; radius = startR; lookTarget.y = startLY; }
+        }
+    };
 }
 
 // ── Band colour palette (golden-angle hue spacing) ────────────────────
@@ -750,6 +789,7 @@ function showInspector({ ev, vc }) {
 // ══════════════════════════════════════════════════════════════════════
 let isDrag = false, prevM = {x:0,y:0}, theta = 0.6, phi = 0.5, radius = 310;
 let airCamTween = null;
+var lookTarget = { y: 15 };   // animate this to zoom toward vehicles at altitude
 
 canvas.addEventListener('mousedown', e => {
     const rect = canvas.getBoundingClientRect();
@@ -840,7 +880,7 @@ function animate() {
     camP.position.x = radius * Math.sin(theta) * Math.cos(phi);
     camP.position.y = Math.max(5, radius * Math.sin(phi));
     camP.position.z = radius * Math.cos(theta) * Math.cos(phi);
-    camP.lookAt(0, 15, 0);
+    camP.lookAt(0, lookTarget.y, 0);
 
     // Animate vehicles — keep all three layer meshes in sync per vehicle
     vehicleObjects.forEach((vo, i) => {
@@ -904,87 +944,100 @@ setInterval(doRefresh, 30000);
 window.addEventListener('resize', renderAltAxis);
 
 // ── Live simulation feed ───────────────────────────────────────────────
+// Defined outside BroadcastChannel block so the localStorage 'storage'
+// fallback can also call them when the user navigates between pages.
+function _airNorm(evObj, cl) {
+    var ev = Object.assign({}, evObj);
+    if (cl) {
+        ev.vehicleCategory  = cl.category;
+        ev.vehicleMode      = cl.domain;
+        ev.altitudeMeters   = (cl.altitudeM  != null) ? cl.altitudeM  : (evObj.altitude_m  ?? 0);
+        ev.speedMph         = (cl.speedMph   != null) ? cl.speedMph   : (evObj.speed_mph   ?? 0);
+        ev.vehicleClassJson = JSON.stringify(cl);
+    } else {
+        ev.altitudeMeters = evObj.altitude_m  ?? 0;
+        ev.speedMph       = evObj.speed_mph   ?? 0;
+    }
+    ev.latitude  = evObj.latitude  ?? evObj.lat  ?? 32.7767;
+    ev.longitude = evObj.longitude ?? evObj.lon  ?? -96.7970;
+    ev.vehicleId = evObj.vehicle_id || ('SIM-' + Math.random().toString(36).slice(2,6).toUpperCase());
+    ev.eventType = evObj.event_type || 'detection';
+    ev.zoneId    = evObj.zone_id    || '';
+    return ev;
+}
+
+function _airInject(evObj, cl) {
+    var ev = _airNorm(evObj, cl);
+    var vc = resolveClass(ev);
+    if (activeDomFilter === 'ground' && vc.domain !== 'ground') return;
+    if (activeDomFilter === 'air'    && vc.domain !== 'air')    return;
+
+    var vo       = buildVehicle(ev);
+    var overlays = buildSpeedOverlay(ev, vo.p, vo.isAir, vo.altY);
+    vo.overlays  = overlays;
+    scene.add(vo.meshP); scene.add(vo.meshS); scene.add(vo.meshT);
+    overlays.forEach(function(m){ scene.add(m); });
+    vehicleObjects.push(vo);
+
+    // Update stat counters + timestamp
+    var gEl = document.getElementById('stGround');
+    var aEl = document.getElementById('stAir');
+    if (vc.domain === 'air') aEl.textContent = (+aEl.textContent||0) + 1;
+    else                     gEl.textContent = (+gEl.textContent||0) + 1;
+    document.getElementById('stTime').textContent = 'Sim · ' + new Date().toLocaleTimeString();
+
+    // Flash overlay label
+    var lbl = document.getElementById('airSimLiveLabel');
+    if (lbl) { lbl.style.opacity = '1'; setTimeout(function(){ lbl.style.opacity = '0'; }, 2500); }
+
+    // ── Perspective close-up fly-in ───────────────────────────────
+    var startR = radius, startP = phi;
+    var targR  = Math.max(25, startR * 0.13);
+    var targP  = Math.max(0.15, Math.min(0.55, startP));
+    var frames = 0, phase = 'in';
+    var FIN = 55, FHOLD = 100, FOUT = 70;
+    airCamTween = function() {
+        var t, ease;
+        if (phase === 'in') {
+            frames++;
+            t = Math.min(1, frames / FIN);
+            ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+            radius = startR + (targR - startR) * ease;
+            phi    = startP + (targP - startP) * ease;
+            if (frames >= FIN) { frames = 0; phase = 'hold'; }
+        } else if (phase === 'hold') {
+            frames++;
+            if (frames >= FHOLD) { frames = 0; phase = 'out'; }
+        } else {
+            frames++;
+            t = Math.min(1, frames / FOUT);
+            ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+            radius = targR + (startR - targR) * ease;
+            phi    = targP + (startP - targP) * ease;
+            if (frames >= FOUT) { airCamTween = null; radius = startR; phi = startP; }
+        }
+    };
+}
+
+// BroadcastChannel — works when both pages are open simultaneously
 if (typeof BroadcastChannel !== 'undefined') {
     var _airSimBc = new BroadcastChannel('airways_sim');
-
-    function _airNorm(evObj, cl) {
-        var ev = Object.assign({}, evObj);
-        if (cl) {
-            ev.vehicleCategory  = cl.category;
-            ev.vehicleMode      = cl.domain;
-            ev.altitudeMeters   = (cl.altitudeM  != null) ? cl.altitudeM  : (evObj.altitude_m  ?? 0);
-            ev.speedMph         = (cl.speedMph   != null) ? cl.speedMph   : (evObj.speed_mph   ?? 0);
-            ev.vehicleClassJson = JSON.stringify(cl);
-        } else {
-            ev.altitudeMeters = evObj.altitude_m  ?? 0;
-            ev.speedMph       = evObj.speed_mph   ?? 0;
-        }
-        ev.latitude  = evObj.latitude  ?? evObj.lat  ?? 32.7767;
-        ev.longitude = evObj.longitude ?? evObj.lon  ?? -96.7970;
-        ev.vehicleId = evObj.vehicle_id || ('SIM-' + Math.random().toString(36).slice(2,6).toUpperCase());
-        ev.eventType = evObj.event_type || 'detection';
-        ev.zoneId    = evObj.zone_id    || '';
-        return ev;
-    }
-
-    function _airInject(evObj, cl) {
-        var ev = _airNorm(evObj, cl);
-        var vc = resolveClass(ev);
-        if (activeDomFilter === 'ground' && vc.domain !== 'ground') return;
-        if (activeDomFilter === 'air'    && vc.domain !== 'air')    return;
-
-        var vo       = buildVehicle(ev);
-        var overlays = buildSpeedOverlay(ev, vo.p, vo.isAir, vo.altY);
-        vo.overlays  = overlays;
-        scene.add(vo.meshP); scene.add(vo.meshS); scene.add(vo.meshT);
-        overlays.forEach(function(m){ scene.add(m); });
-        vehicleObjects.push(vo);
-
-        // Update stat counters + timestamp
-        var gEl = document.getElementById('stGround');
-        var aEl = document.getElementById('stAir');
-        if (vc.domain === 'air') aEl.textContent = (+aEl.textContent||0) + 1;
-        else                     gEl.textContent = (+gEl.textContent||0) + 1;
-        document.getElementById('stTime').textContent = 'Sim · ' + new Date().toLocaleTimeString();
-
-        // Flash overlay label
-        var lbl = document.getElementById('airSimLiveLabel');
-        if (lbl) { lbl.style.opacity = '1'; setTimeout(function(){ lbl.style.opacity = '0'; }, 2500); }
-
-        // ── Perspective close-up fly-in ───────────────────────────────
-        var startR = radius, startP = phi;
-        var targR  = Math.max(25, startR * 0.13);
-        var targP  = Math.max(0.15, Math.min(0.55, startP));
-        var frames = 0, phase = 'in';
-        var FIN = 55, FHOLD = 100, FOUT = 70;
-        airCamTween = function() {
-            var t, ease;
-            if (phase === 'in') {
-                frames++;
-                t = Math.min(1, frames / FIN);
-                ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-                radius = startR + (targR - startR) * ease;
-                phi    = startP + (targP - startP) * ease;
-                if (frames >= FIN) { frames = 0; phase = 'hold'; }
-            } else if (phase === 'hold') {
-                frames++;
-                if (frames >= FHOLD) { frames = 0; phase = 'out'; }
-            } else {
-                frames++;
-                t = Math.min(1, frames / FOUT);
-                ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-                radius = targR + (startR - targR) * ease;
-                phi    = targP + (startP - targP) * ease;
-                if (frames >= FOUT) { airCamTween = null; radius = startR; phi = startP; }
-            }
-        };
-    }
-
     _airSimBc.onmessage = function(e) {
         if (!e.data) return;
         if (e.data.type === 'sim_vehicle' && e.data.payload) _airInject(e.data.payload, e.data.classification);
         if (e.data.type === 'sim_started') doRefresh();
     };
 }
+
+// localStorage fallback — fires via 'storage' event when DataInputFormats
+// writes a sim event even after the user has navigated away from that page
+window.addEventListener('storage', function(e) {
+    if (e.key !== 'airways_sim_last_event' || !e.newValue) return;
+    try {
+        var msg = JSON.parse(e.newValue);
+        if (msg.type === 'sim_vehicle' && msg.payload) _airInject(msg.payload, msg.classification);
+        if (msg.type === 'sim_started') doRefresh();
+    } catch(ex) {}
+});
 </script>
 }
