@@ -35,7 +35,9 @@ public class ApiController : ControllerBase
         if (HttpContext.Session.GetString("UserId") is { Length: > 0 }) return true;
         var configKey = _cfg["DeviceApiKey"];
         if (string.IsNullOrEmpty(configKey)) return false;
-        var headerKey = HttpContext.Request.Headers["X-Device-Api-Key"].FirstOrDefault();
+        // Canonical header is X-Device-Token (matches SessionAuthFilter.HasValidDeviceToken)
+        var headerKey = HttpContext.Request.Headers["X-Device-Token"].FirstOrDefault()
+                     ?? HttpContext.Request.Headers["X-Device-Api-Key"].FirstOrDefault();
         return !string.IsNullOrEmpty(headerKey) && CryptographicEquals(headerKey, configKey);
     }
 

@@ -74,6 +74,9 @@ try
     // D5: IVehicleRegistry — singleton via DI
     builder.Services.AddSingleton<IVehicleRegistry, VehicleRegistry>();
 
+    // VehicleClassifier — scoped so it gets a fresh instance per request
+    builder.Services.AddScoped<VehicleClassifier>();
+
     // D6 / E5: Heartbeat monitor — auto-marks stale devices offline
     builder.Services.AddHostedService<HeartbeatMonitorService>();
 
