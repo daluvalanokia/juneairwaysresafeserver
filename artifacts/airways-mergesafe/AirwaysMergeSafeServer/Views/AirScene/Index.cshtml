@@ -614,7 +614,7 @@ function loadEvents(evs) {
 
 async function doRefresh() {
     try {
-        const r = await fetch(`/api/events/live?highwayId=${HW}&take=140`);
+        const r = await fetch(`/api/events/live?highwayId=${HW}&take=140&mode=air`);
         if (!r.ok) return;
         loadEvents(await r.json());
     } catch(e) { console.warn('AirScene refresh error:', e); }

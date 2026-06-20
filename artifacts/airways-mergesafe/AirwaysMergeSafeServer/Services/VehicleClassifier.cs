@@ -64,7 +64,8 @@ public class VehicleClassifier
         bool hasVehicleType = false, hasAlt = false, hasSpeed = false, hasLatLon = false;
         bool hasFlightPhase = false, conflictFlag = false;
 
-        bool isAirFlyCarField = false;   // Task 10: isAirFlyCar="Y" in payload
+        bool isAirFlyCarField       = false;   // Task 10: isAirFlyCar="Y" in payload → treat as air
+        bool isAirFlyCarExplicitlyNo = false;  // Task 10: isAirFlyCar="N" → never promote via altitude
 
         if (!string.IsNullOrEmpty(payloadJson))
         {
@@ -101,9 +102,14 @@ public class VehicleClassifier
                                    (cfEl.ValueKind == JsonValueKind.Number && cfEl.GetInt32() != 0) ||
                                    cfEl.GetString() == "true";
 
-                // Task 10: isAirFlyCar="Y" in payload is the highest-priority air signal
+                // Task 10: isAirFlyCar field is authoritative
+                //   "Y" → treat as air (highest priority); "N" → block altitude-to-air promotion
                 if (root.TryGetProperty("isAirFlyCar", out var iafEl))
-                    isAirFlyCarField = string.Equals(iafEl.GetString(), "Y", StringComparison.OrdinalIgnoreCase);
+                {
+                    var iafStr = iafEl.GetString();
+                    isAirFlyCarField       = string.Equals(iafStr, "Y", StringComparison.OrdinalIgnoreCase);
+                    isAirFlyCarExplicitlyNo = string.Equals(iafStr, "N", StringComparison.OrdinalIgnoreCase);
+                }
             }
             catch { /* non-fatal */ }
         }
@@ -133,7 +139,9 @@ public class VehicleClassifier
                 category = "air_urban";        // safe default for airflycar source
         }
         // ── Step 1 (existing): Standard altitude gate ─────────────────────
-        else if (hasAlt && altM.HasValue && altM.Value > 10)
+        // isAirFlyCar="N" is authoritative: never promote to air via altitude alone.
+        // An explicit "N" flag overrides any altitude reading for that event.
+        else if (hasAlt && altM.HasValue && altM.Value > 10 && !isAirFlyCarExplicitlyNo)
         {
             domain   = "air";
             category = altM.Value <= 150.0 ? "air_urban" : "air_express";

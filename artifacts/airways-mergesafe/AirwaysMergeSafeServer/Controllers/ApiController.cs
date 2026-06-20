@@ -102,7 +102,7 @@ public class ApiController : ControllerBase
                 e.Latitude, e.Longitude, e.AltitudeMeters,
                 // Phase 6
                 e.VehicleMode, e.VehicleCategory, e.VehicleClassJson,
-                e.CreatedDate
+                e.IsAirFlyCar, e.CreatedDate
             })
             .ToListAsync();
         return Ok(events);

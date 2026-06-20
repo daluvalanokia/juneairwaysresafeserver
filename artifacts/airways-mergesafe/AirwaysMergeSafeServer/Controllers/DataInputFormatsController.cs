@@ -5,6 +5,7 @@ using AirwaysMergeSafeServer.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AirwaysMergeSafeServer.Controllers;
 
@@ -64,8 +65,10 @@ public class DataInputFormatsController : Controller
     public async Task<IActionResult> SimulationPost(
         string? highwayId, string? zoneId, string? serverId, string? sourceType)
     {
-        var type   = sourceType ?? "physical";
-        var fields = string.Equals(type, "airflycar", StringComparison.OrdinalIgnoreCase)
+        var type          = sourceType ?? "physical";
+        var isAirFlyCarSrc = string.Equals(type, "airflycar", StringComparison.OrdinalIgnoreCase);
+        // Task 10: all formats carry isAirFlyCar explicitly (Y for airflycar source, N for others)
+        var fields = isAirFlyCarSrc
             ? new[] {
                 "vehicle_id","timestamp","latitude","longitude","altitude_m","speed_mph","heading",
                 "vehicle_type","flight_phase","vertical_rate_fpm","battery_soc","battery_temp_c",
@@ -77,10 +80,14 @@ public class DataInputFormatsController : Controller
             : new[] {
                 "vehicle_id","timestamp","speed_mph","latitude","longitude",
                 "altitude_m","direction","lane","vehicle_type","event_type",
-                "zone_id","highway_id","signal_strength"
+                "zone_id","highway_id","signal_strength","isAirFlyCar"
               };
 
         var payload = _payloadSvc.Generate(type, fields);
+        // Task 10: for non-airflycar sources, enforce isAirFlyCar="N" in payload BEFORE
+        // classification, so the classifier never promotes them to air via the Y-field gate.
+        if (!isAirFlyCarSrc)
+            payload = ForceIsAirFlyCarN(payload);
         var label   = $"Simulation [{type.ToUpper()}] — {DateTime.UtcNow:HH:mm:ss}";
         var now     = DateTime.UtcNow;
 
@@ -261,5 +268,22 @@ public class DataInputFormatsController : Controller
         if (p != null) { _db.SamplePayloads.Remove(p); await _db.SaveChangesAsync(); }
         if (IsAjax) return Json(new { ok = true });
         return RedirectToAction(nameof(Index), new { activeTab });
+    }
+
+    /// <summary>
+    /// Task 10: Ensure isAirFlyCar="N" is present in non-airflycar payload JSON before
+    /// classification. Overrides any randomly-generated Y value from the payload service,
+    /// preventing altitude-based events from being promoted to air by the Y-field gate.
+    /// </summary>
+    private static string ForceIsAirFlyCarN(string json)
+    {
+        try
+        {
+            var node = JsonNode.Parse(json)?.AsObject();
+            if (node is null) return json;
+            node["isAirFlyCar"] = "N";
+            return node.ToJsonString();
+        }
+        catch { return json; }
     }
 }

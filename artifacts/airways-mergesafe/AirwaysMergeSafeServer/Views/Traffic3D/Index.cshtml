@@ -230,7 +230,7 @@ function loadEvents(events) {
 
 async function refreshScene() {
     try {
-        const r = await fetch(`/api/events/live?highwayId=${HW}&take=100`);
+        const r = await fetch(`/api/events/live?highwayId=${HW}&take=100&mode=ground`);
         if (!r.ok) return;
         loadEvents(await r.json());
     } catch(e) { console.warn('Scene refresh error:', e); }
