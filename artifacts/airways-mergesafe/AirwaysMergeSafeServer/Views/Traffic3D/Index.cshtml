@@ -800,28 +800,26 @@ function animate() {
     camP.position.z = 120 + radius * 0.25 * Math.cos(theta * 0.3);
     camP.lookAt(60, 0, 0);
 
-    // Vehicle forward motion — smooth acceleration + suspension realism
-    if (!animationPaused) {
-        vehicleMeshes.forEach(m => {
-            const ud = m.userData;
-            // Smooth velocity interpolation (gradual speed transitions between DB refreshes)
-            ud.vx += (ud.targetVx - ud.vx) * 0.04;
-            ud.vz += (ud.targetVz - ud.vz) * 0.04;
-            // Slight traffic-flow jitter (±6% speed variation per vehicle)
-            const jitter = 1 + Math.sin(tick * 0.03 + ud.phase) * 0.06;
-            m.position.x += ud.vx * jitter;
-            // Lane keeping: soft Z correction so vehicles ease back to lane centre
-            m.position.z += (ud.laneZ - m.position.z) * 0.05;
-            // Suspension bounce: amplitude scales with speed (faster = bigger bumps)
-            const spd = Math.abs(ud.vx) + 0.01;
-            m.position.y = ud.baseY + Math.sin(tick * 0.22 + ud.phase) * spd * 0.14;
-            // Body roll: lean slightly into lane drift correction
-            m.rotation.z = (ud.laneZ - m.position.z) * 0.012;
-            // Wrap at road ends
-            if (m.position.x >  ROAD_HALF) m.position.x = -ROAD_HALF;
-            if (m.position.x < -ROAD_HALF) m.position.x =  ROAD_HALF;
-        });
-    }
+    // Vehicle forward motion — always runs; animationPaused only gates the 30s DB poll
+    vehicleMeshes.forEach(m => {
+        const ud = m.userData;
+        // Smooth velocity interpolation (gradual speed transitions between DB refreshes)
+        ud.vx += (ud.targetVx - ud.vx) * 0.04;
+        ud.vz += (ud.targetVz - ud.vz) * 0.04;
+        // Slight traffic-flow jitter (±6% speed variation per vehicle)
+        const jitter = 1 + Math.sin(tick * 0.03 + ud.phase) * 0.06;
+        m.position.x += ud.vx * jitter;
+        // Lane keeping: soft Z correction so vehicles ease back to lane centre
+        m.position.z += (ud.laneZ - m.position.z) * 0.05;
+        // Suspension bounce: amplitude scales with speed (faster = bigger bumps)
+        const spd = Math.abs(ud.vx) + 0.01;
+        m.position.y = ud.baseY + Math.sin(tick * 0.22 + ud.phase) * spd * 0.14;
+        // Body roll: lean slightly into lane drift correction
+        m.rotation.z = (ud.laneZ - m.position.z) * 0.012;
+        // Wrap at road ends
+        if (m.position.x >  ROAD_HALF) m.position.x = -ROAD_HALF;
+        if (m.position.x < -ROAD_HALF) m.position.x =  ROAD_HALF;
+    });
 
     const cw = renderer.domElement.clientWidth;
     const ch = renderer.domElement.clientHeight;
@@ -892,6 +890,18 @@ function _simInject(evObj, cl) {
     if (vc.domain !== 'ground') return;
 
     _updateSimPanel(ev, '⏳ saving…');
+
+    // Immediate visual update by vehicleId — no DB round-trip needed for known vehicles
+    if (ev.vehicleId && vehicleMap.has(ev.vehicleId)) {
+        var _mesh = vehicleMap.get(ev.vehicleId);
+        var _hDeg = ev.heading ?? (_mesh.userData.laneZ < 0 ? 90 : 270);
+        var _hRad = _hDeg * Math.PI / 180;
+        var _spd  = (Math.max(0, ev.speedMph ?? 55)) * 0.018;
+        _mesh.userData.targetVx  = Math.sin(_hRad) * _spd;
+        _mesh.userData.targetVz  = -Math.cos(_hRad) * _spd;
+        _mesh.userData.ev        = ev;
+        _mesh.rotation.y         = _hRad;
+    }
 
     // ── Always save to DB + refresh (works in both live and sim-only modes) ──
     fetch('/api/sim/event', {
