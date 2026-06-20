@@ -1169,12 +1169,14 @@ function _airInject(evObj, cl) {
         })
     }).then(function(r) {
         return r.json().then(function(j) {
-            if (r.ok) { _updateAirSimPanel(ev, '✓ saved · id ' + j.id); doRefresh(); }
-            else       { _updateAirSimPanel(ev, '✗ ' + (j.error || r.status)); }
+            if (r.ok) _updateAirSimPanel(ev, '✓ saved · id ' + j.id);
+            else       _updateAirSimPanel(ev, '✗ ' + (j.error || r.status));
         });
     }).catch(function(err) {
         _updateAirSimPanel(ev, '✗ ' + (err.message || 'network error'));
-        _airInjectDirect(ev, cl); // fallback: direct inject
+        _airInjectDirect(ev, cl); // fallback: direct inject for visual continuity
+    }).finally(function() {
+        doRefresh(); // always refresh — event may already be in DB from SimulationPost
     });
 
     var lbl = document.getElementById('airSimLiveLabel');
