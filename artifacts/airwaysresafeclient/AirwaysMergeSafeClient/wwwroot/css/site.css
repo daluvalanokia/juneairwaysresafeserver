@@ -8,15 +8,73 @@ html {
   }
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
 html {
   position: relative;
   min-height: 100%;
 }
 
 body {
-  margin-bottom: 60px;
+  margin-bottom: 20px;
+  background-color: #1a1a1a;
+}
+
+/* ── Stat box ───────────────────────────────────────────────── */
+.stat-box {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 8px 4px;
+}
+
+.stat-val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-lbl {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* ── Leaflet dark overrides ─────────────────────────────────── */
+.leaflet-container {
+  background: #1a1a2e;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #2a2a2a;
+  color: #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.7);
+}
+
+/* ── Simulation log ─────────────────────────────────────────── */
+#sim-log, #gps-nearby-list {
+  scrollbar-width: thin;
+  scrollbar-color: #555 #1a1a1a;
+}
+
+/* ── Nav active link ────────────────────────────────────────── */
+.nav-link.active,
+.nav-link:hover {
+  color: #0dcaf0 !important;
+}
+
+/* ── form-label small ───────────────────────────────────────── */
+.form-label.form-label-sm {
+  margin-bottom: 0.25rem;
+}
+
+/* ── x-small text ───────────────────────────────────────────── */
+.x-small {
+  font-size: 0.7rem;
+}
+
+/* ── Card borders ───────────────────────────────────────────── */
+.card {
+  border-radius: 6px;
 }

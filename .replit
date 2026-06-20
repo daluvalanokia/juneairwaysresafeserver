@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "AirwaysMergeSafeServer"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "AirwaysMergeSafeClient"
+
 [[workflows.workflow]]
 name = "AirwaysMergeSafeServer"
 author = "agent"
@@ -28,6 +32,18 @@ author = "agent"
 task = "shell.exec"
 args = "PORT=3000 dotnet run --project artifacts/airways-mergesafe/AirwaysMergeSafeServer/AirwaysMergeSafeServer.csproj"
 waitForPort = 3000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "AirwaysMergeSafeClient"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3001 dotnet run --project artifacts/airwaysresafeclient/AirwaysMergeSafeClient/AirwaysMergeSafeClient.csproj"
+waitForPort = 3001
 
 [workflows.workflow.metadata]
 outputType = "webview"
@@ -44,6 +60,10 @@ timeoutMs = 20000
 [[ports]]
 localPort = 3000
 externalPort = 3000
+
+[[ports]]
+localPort = 3001
+externalPort = 3002
 
 [[ports]]
 localPort = 5000

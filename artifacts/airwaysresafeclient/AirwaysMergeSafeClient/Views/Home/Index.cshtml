@@ -101,7 +101,7 @@
                         <tbody>
                             <tr><td class="text-muted">Server URL</td><td class="text-break small">@(string.IsNullOrWhiteSpace(cfg.ServerBaseUrl) ? "—" : cfg.ServerBaseUrl)</td></tr>
                             <tr><td class="text-muted">Highway ID</td><td><code>@(string.IsNullOrWhiteSpace(cfg.HighwayId) ? "—" : cfg.HighwayId)</code></td></tr>
-                            <tr><td class="text-muted">API Key</td><td>@(string.IsNullOrWhiteSpace(cfg.DeviceApiKey) ? <span class="text-danger">Not set</span> : <span class="text-success">Set ✓</span>)</td></tr>
+                            <tr><td class="text-muted">API Key</td><td>@if (string.IsNullOrWhiteSpace(cfg.DeviceApiKey)) { <span class="text-danger">Not set</span> } else { <span class="text-success">Set ✓</span> }</td></tr>
                             <tr><td class="text-muted">Auto-Connect</td><td>@(cfg.AutoConnectOnStartup ? "Yes" : "No")</td></tr>
                             <tr><td class="text-muted">Receive</td><td>@(cfg.ReceiveEnabled ? $"Every {cfg.ReceivePollSeconds}s" : "Disabled")</td></tr>
                             <tr><td class="text-muted">Send</td><td>@(cfg.SendEnabled ? $"Every {cfg.SendPollSeconds}s" : "Disabled")</td></tr>
@@ -451,7 +451,7 @@ function appendLog(entry) {
     if (entry.ok) {
         const conf = entry.confidence != null ? `${(entry.confidence * 100).toFixed(0)}%` : '?';
         text = `<span class="text-success">[${time}] #${entry.id} ${entry.domain}/${entry.category} (${conf})`
-             + ` — ${entry.lat},${entry.lng} @${entry.speed}mph ${entry.evtType}</span>`;
+             + ` \u2014 ${entry.lat},${entry.lng} ${entry.speed}mph ${entry.evtType}</span>`;
     } else {
         text = `<span class="text-danger">[${time}] ✗ ${entry.error}</span>`;
     }
