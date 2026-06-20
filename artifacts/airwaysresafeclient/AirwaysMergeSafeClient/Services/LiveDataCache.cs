@@ -19,6 +19,13 @@ public class LiveDataCache
     public List<AltitudeBandDto> AltitudeBands    { get; private set; } = [];
     public List<InputFormatDto>  AutomobileFormats { get; private set; } = [];
 
+    // ── Vehicle telemetry (updated each sync loop from ClientConfig) ──────
+    public double  VehicleLat      { get; private set; }
+    public double  VehicleLon      { get; private set; }
+    public double  VehicleSpeedMph { get; private set; }
+    public double  VehicleHeading  { get; private set; }
+    public double  VehicleAltM     { get; private set; }
+
     // ── Setters (all thread-safe) ─────────────────────────────────────────
 
     public void SetPolling()
@@ -64,17 +71,34 @@ public class LiveDataCache
         lock (_lock) { AutomobileFormats = formats; }
     }
 
+    public void SetVehicleTelemetry(double lat, double lon, double speedMph, double heading, double altM)
+    {
+        lock (_lock)
+        {
+            VehicleLat      = lat;
+            VehicleLon      = lon;
+            VehicleSpeedMph = speedMph;
+            VehicleHeading  = heading;
+            VehicleAltM     = altM;
+        }
+    }
+
     /// <summary>Returns a snapshot suitable for JSON serialisation.</summary>
     public object ToSnapshot() => new
     {
-        status           = Status.ToString(),
-        lastPollUtc      = LastPollUtc,
-        lastError        = LastError,
-        stats            = Stats,
-        zones            = Zones,
-        liveEvents       = LiveEvents,
-        altitudeBands    = AltitudeBands,
-        automobileFormats = AutomobileFormats
+        status            = Status.ToString(),
+        lastPollUtc       = LastPollUtc,
+        lastError         = LastError,
+        stats             = Stats,
+        zones             = Zones,
+        liveEvents        = LiveEvents,
+        altitudeBands     = AltitudeBands,
+        automobileFormats = AutomobileFormats,
+        vehicleLat        = VehicleLat,
+        vehicleLon        = VehicleLon,
+        vehicleSpeedMph   = VehicleSpeedMph,
+        vehicleHeading    = VehicleHeading,
+        vehicleAltM       = VehicleAltM
     };
 }
 

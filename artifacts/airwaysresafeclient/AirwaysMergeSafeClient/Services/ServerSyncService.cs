@@ -18,8 +18,14 @@ public class ServerSyncService : BackgroundService
     private readonly ILogger<ServerSyncService> _logger;
     private readonly IHttpClientFactory    _http;
 
-    private DateTime _lastReceive = DateTime.MinValue;
-    private DateTime _lastSend    = DateTime.MinValue;
+    private DateTime _lastReceive        = DateTime.MinValue;
+    private DateTime _lastSend           = DateTime.MinValue;
+    private bool     _syncEnabledSession = true;   // set false on first run if AutoConnectOnStartup=false
+    private bool     _firstRun           = true;
+
+    /// <summary>Allows a UI action to enable sync even if AutoConnectOnStartup is false.</summary>
+    public void EnableSyncNow()  => _syncEnabledSession = true;
+    public void DisableSyncNow() => _syncEnabledSession = false;
 
     private static readonly JsonSerializerOptions _json = new()
     {
@@ -58,6 +64,26 @@ public class ServerSyncService : BackgroundService
                 if (cfg is null
                     || string.IsNullOrWhiteSpace(cfg.ServerBaseUrl)
                     || string.IsNullOrWhiteSpace(cfg.DeviceApiKey))
+                {
+                    _cache.SetNotConfigured();
+                    await Task.Delay(5_000, ct);
+                    continue;
+                }
+
+                // Honor AutoConnectOnStartup: on first run, gate sync on the flag
+                if (_firstRun)
+                {
+                    _syncEnabledSession = cfg.AutoConnectOnStartup;
+                    _firstRun = false;
+                }
+
+                // Always surface current vehicle telemetry to the cache
+                _cache.SetVehicleTelemetry(
+                    cfg.CurrentLatitude, cfg.CurrentLongitude,
+                    cfg.CurrentSpeedMph, cfg.CurrentHeading,
+                    cfg.DefaultAltitudeMeters);
+
+                if (!_syncEnabledSession)
                 {
                     _cache.SetNotConfigured();
                     await Task.Delay(5_000, ct);
@@ -122,7 +148,7 @@ public class ServerSyncService : BackgroundService
 
             _cache.SetConnected(
                 stats is null ? null : new ServerStatsDto(stats.Zones, stats.Servers, stats.Sensors, stats.Events, stats.Ground, stats.Air),
-                zones.Select  (z => new ServerZoneDto(z.Id, z.ZoneName ?? "", z.ZoneId ?? "", z.HighwayId ?? "", z.Lat, z.Lon, z.RadiusM, z.ZoneType)).ToList(),
+                zones.Select  (z => new ServerZoneDto(z.Id, z.ZoneName ?? "", z.ZoneId ?? "", z.HighwayId ?? "", z.Latitude, z.Longitude, z.GeofenceRadius, z.Status)).ToList(),
                 events.Select (e => new ServerEventDto(e.Id, e.EventType ?? "detection", e.ZoneId, e.HighwayId ?? "", e.VehicleId, e.SpeedMph, e.Latitude, e.Longitude, e.AltitudeMeters, e.VehicleMode ?? "ground", e.VehicleCategory ?? "sedan", e.IsAirFlyCar ?? "N", e.CreatedDate)).ToList(),
                 bands.Select  (b => new AltitudeBandDto(b.ServerId ?? "", b.ServerName ?? "", b.ZoneId, b.HighwayId ?? "", b.AltitudeMinMeters, b.AltitudeMaxMeters, b.AltitudeWidthMeters)).ToList()
             );
@@ -229,8 +255,10 @@ public class ServerSyncService : BackgroundService
     private sealed class ZoneJson
     {
         public int Id { get; set; } public string? ZoneName { get; set; } public string? ZoneId { get; set; }
-        public string? HighwayId { get; set; } public double? Lat { get; set; } public double? Lon { get; set; }
-        public double? RadiusM { get; set; } public string? ZoneType { get; set; }
+        public string? HighwayId { get; set; }
+        // Field names match the server's /api/zones projection (Latitude/Longitude/GeofenceRadius/Status)
+        public double? Latitude { get; set; } public double? Longitude { get; set; }
+        public double? GeofenceRadius { get; set; } public string? Status { get; set; }
     }
     private sealed class EventJson
     {

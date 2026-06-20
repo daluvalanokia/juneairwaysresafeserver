@@ -314,6 +314,17 @@ function pollSnapshot() {
                 document.getElementById('gps-ground').textContent = d.stats.ground;
                 document.getElementById('gps-air').textContent    = d.stats.air;
             }
+            // Update vehicle telemetry panel and GPS marker from latest snapshot
+            if (d.vehicleLat != null && d.vehicleLon != null) {
+                document.getElementById('gps-lat').textContent     = d.vehicleLat.toFixed(5);
+                document.getElementById('gps-lon').textContent     = d.vehicleLon.toFixed(5);
+                document.getElementById('gps-speed').textContent   = (d.vehicleSpeedMph ?? 0).toFixed(1);
+                document.getElementById('gps-heading').textContent = Math.round(d.vehicleHeading ?? 0);
+                if (gpsVehicleMarker) {
+                    gpsVehicleMarker.setLatLng([d.vehicleLat, d.vehicleLon]);
+                    gpsMap.panTo([d.vehicleLat, d.vehicleLon], {animate: true, duration: 0.5});
+                }
+            }
         })
         .catch(() => {});
 }

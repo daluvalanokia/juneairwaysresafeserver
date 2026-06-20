@@ -37,13 +37,19 @@ public class SettingsController : Controller
         var existing = await _db.ClientConfig.FirstOrDefaultAsync();
         if (existing is null)
         {
+            // Generate VehicleId in required format if blank
+            if (string.IsNullOrWhiteSpace(model.VehicleId))
+                model.VehicleId = GenerateVehicleId(model.AutoMake, model.AutoModel);
             model.UpdatedDate = DateTime.UtcNow;
             _db.ClientConfig.Add(model);
         }
         else
         {
             // Preserve auto-generated IDs if user left them blank
-            if (string.IsNullOrWhiteSpace(model.VehicleId)) model.VehicleId = existing.VehicleId;
+            if (string.IsNullOrWhiteSpace(model.VehicleId))
+                model.VehicleId = string.IsNullOrWhiteSpace(existing.VehicleId)
+                    ? GenerateVehicleId(model.AutoMake, model.AutoModel)
+                    : existing.VehicleId;
             if (string.IsNullOrWhiteSpace(model.DeviceId))  model.DeviceId  = existing.DeviceId;
             model.Id          = existing.Id;
             model.UpdatedDate = DateTime.UtcNow;
@@ -54,11 +60,24 @@ public class SettingsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    [HttpPost]
+    private static string GenerateVehicleId(string make, string model)
+    {
+        var m  = string.IsNullOrWhiteSpace(make)  ? "VH" : make.Trim().Replace(" ", "");
+        var mo = string.IsNullOrWhiteSpace(model) ? "XX" : model.Trim().Replace(" ", "");
+        var id = Guid.NewGuid().ToString("N")[..8].ToUpper();
+        return $"VH-{m}-{mo}-{id}";
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> TestConnection([FromBody] TestConnectionRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.ServerBaseUrl) || string.IsNullOrWhiteSpace(req.DeviceApiKey))
             return Json(new { ok = false, message = "Server URL and API key are required." });
+
+        // SSRF guard: only allow http/https schemes
+        if (!Uri.TryCreate(req.ServerBaseUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return Json(new { ok = false, message = "Server URL must use http:// or https://." });
 
         try
         {
