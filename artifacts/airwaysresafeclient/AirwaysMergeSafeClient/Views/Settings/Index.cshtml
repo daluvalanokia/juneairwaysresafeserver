@@ -1,0 +1,241 @@
+@model AirwaysMergeSafeClient.Models.ClientConfig
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <h4 class="mb-3"><span class="text-info">⚙</span> Client Settings</h4>
+
+    <form asp-controller="Settings" asp-action="Save" method="post">
+      @Html.AntiForgeryToken()
+
+      @* ── User Profile ─────────────────────────────────── *@
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-header text-info small fw-semibold">User Profile</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label small">Full Name</label>
+              <input asp-for="FullName" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Phone</label>
+              <input asp-for="Phone" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Address</label>
+              <input asp-for="Address" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      @* ── Automobile ───────────────────────────────────── *@
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-header text-info small fw-semibold">Automobile</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small">Display Name <span class="text-muted">(shown in navbar)</span></label>
+              <input asp-for="AutoDisplayName" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Make</label>
+              <input asp-for="AutoMake" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="e.g. Toyota" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Model</label>
+              <input asp-for="AutoModel" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="e.g. Camry" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small">Year</label>
+              <input asp-for="AutoYear" type="number" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Type <span class="text-muted">(→ server VehicleType)</span></label>
+              <select asp-for="AutoType" class="form-select form-select-sm bg-dark text-light border-secondary">
+                <option value="sedan">Sedan</option>
+                <option value="suv">SUV</option>
+                <option value="truck">Truck</option>
+                <option value="motorcycle">Motorcycle</option>
+                <option value="van">Van</option>
+                <option value="air_urban">Air Urban (eVTOL)</option>
+                <option value="air_express">Air Express</option>
+              </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+              <div class="form-check form-switch mb-1">
+                <input asp-for="IsAirFlyCar" type="hidden" value="N" />
+                <input class="form-check-input" type="checkbox" id="IsAirFlyCarCheck"
+                       @(Model.IsAirFlyCar == "Y" ? "checked" : "")
+                       onchange="document.querySelector('[name=IsAirFlyCar]').value = this.checked ? 'Y' : 'N'" />
+                <label class="form-check-label small" for="IsAirFlyCarCheck">AirFlyCar (Y/N)</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      @* ── Server Connection ────────────────────────────── *@
+      <div class="card bg-dark border-warning mb-3">
+        <div class="card-header text-warning small fw-semibold">
+          Server Connection <span class="text-muted fw-normal">(must match server settings)</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label small">Server Base URL</label>
+              <input asp-for="ServerBaseUrl" id="inp-url"
+                     class="form-control form-control-sm bg-dark text-light border-secondary"
+                     placeholder="https://your-server.repl.co" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Highway ID <span class="text-muted">(query param on every call)</span></label>
+              <input asp-for="HighwayId" id="inp-hw"
+                     class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-8">
+              <label class="form-label small">
+                Device API Key
+                <span class="text-muted">— must match server's <code>DeviceApiKey</code> / <code>DEVICE_API_KEY</code></span>
+              </label>
+              <input asp-for="DeviceApiKey" id="inp-key" type="password"
+                     class="form-control form-control-sm bg-dark text-light border-secondary"
+                     autocomplete="off" />
+            </div>
+            <div class="col-md-4 d-flex align-items-end gap-2">
+              <button type="button" class="btn btn-sm btn-outline-info" id="btn-test">Test Connection</button>
+              <span id="test-result" class="small"></span>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Vehicle ID <span class="text-muted">(auto-generated)</span></label>
+              <input asp-for="VehicleId" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Device ID</label>
+              <input asp-for="DeviceId" class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <div class="form-check form-switch mb-1">
+                <input asp-for="AutoConnectOnStartup" class="form-check-input" type="checkbox" />
+                <label class="form-check-label small">Auto-connect</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      @* ── Receive & Send ────────────────────────────────── *@
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card bg-dark border-secondary h-100">
+            <div class="card-header text-info small fw-semibold">Receive from Server</div>
+            <div class="card-body">
+              <div class="form-check form-switch mb-2">
+                <input asp-for="ReceiveEnabled" class="form-check-input" type="checkbox" />
+                <label class="form-check-label small">Enable receive polling</label>
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small">Poll interval (s)</label>
+                  <input asp-for="ReceivePollSeconds" type="number" min="5" max="300"
+                         class="form-control form-control-sm bg-dark text-light border-secondary" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Live events count</label>
+                  <input asp-for="LiveEventsTake" type="number" min="10" max="200"
+                         class="form-control form-control-sm bg-dark text-light border-secondary" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Events window (min)</label>
+                  <input asp-for="LiveEventsSinceMinutes" type="number" min="1" max="60"
+                         class="form-control form-control-sm bg-dark text-light border-secondary" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card bg-dark border-secondary h-100">
+            <div class="card-header text-info small fw-semibold">Send to Server</div>
+            <div class="card-body">
+              <div class="form-check form-switch mb-2">
+                <input asp-for="SendEnabled" class="form-check-input" type="checkbox" />
+                <label class="form-check-label small">Enable send (background position reports)</label>
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small">Poll interval (s)</label>
+                  <input asp-for="SendPollSeconds" type="number" min="2" max="300"
+                         class="form-control form-control-sm bg-dark text-light border-secondary" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Default event type</label>
+                  <select asp-for="DefaultEventType" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="detection">detection</option>
+                    <option value="entry">entry</option>
+                    <option value="exit">exit</option>
+                    <option value="merge">merge</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">Default altitude (m)</label>
+                  <input asp-for="DefaultAltitudeMeters" type="number" step="0.1"
+                         class="form-control form-control-sm bg-dark text-light border-secondary" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      @* ── Reliability ───────────────────────────────────── *@
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-header text-secondary small fw-semibold">Reliability</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label small">HTTP timeout (s)</label>
+              <input asp-for="HttpTimeoutSeconds" type="number" min="5" max="120"
+                     class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Retry count</label>
+              <input asp-for="RetryCount" type="number" min="0" max="5"
+                     class="form-control form-control-sm bg-dark text-light border-secondary" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-success px-4">Save Settings</button>
+      <a asp-controller="Home" asp-action="Index" class="btn btn-secondary ms-2">Cancel</a>
+    </form>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+document.getElementById('btn-test').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-test');
+    const res = document.getElementById('test-result');
+    btn.disabled = true; res.textContent = 'Testing…'; res.className = 'small text-muted';
+    try {
+        const r = await fetch('/Settings/TestConnection', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                serverBaseUrl: document.getElementById('inp-url').value,
+                deviceApiKey:  document.getElementById('inp-key').value,
+                highwayId:     document.getElementById('inp-hw').value
+            })
+        });
+        const d = await r.json();
+        res.textContent = d.message;
+        res.className = 'small ' + (d.ok ? 'text-success' : 'text-danger');
+    } catch(e) { res.textContent = e.message; res.className = 'small text-danger'; }
+    btn.disabled = false;
+});
+</script>
+}

@@ -1,0 +1,462 @@
+@model AirwaysMergeSafeClient.Models.ClientConfig
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Dashboard";
+    var cfg    = Model;
+    var cache  = ViewBag.Cache as AirwaysMergeSafeClient.Services.LiveDataCache;
+    var status = ViewBag.Status as string ?? "NotConfigured";
+    var zones  = cache?.Zones  ?? new();
+    var events = cache?.LiveEvents ?? new();
+    var stats  = cache?.Stats;
+    var zonesJson  = JsonSerializer.Serialize(zones,  new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    var eventsJson = JsonSerializer.Serialize(events, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+}
+
+@* ── Tab nav ──────────────────────────────────────────────────────── *@
+<ul class="nav nav-tabs mb-3" id="dashTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-gps"    type="button">🗺 GPS Navigation</button></li>
+    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#tab-vehicle" type="button">🚗 Vehicle Details</button></li>
+    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#tab-sim"    type="button">▶ Simulation</button></li>
+</ul>
+
+<div class="tab-content">
+
+@* ════════════════════════════════════════════════════════════════════ *@
+@* TAB 1 — GPS Navigation                                              *@
+@* ════════════════════════════════════════════════════════════════════ *@
+<div class="tab-pane fade show active" id="tab-gps">
+    <div class="row g-2">
+        <div class="col-lg-9">
+            <div id="gps-map" style="height:520px;border-radius:6px;border:1px solid #444;"></div>
+        </div>
+        <div class="col-lg-3">
+            <div class="card bg-dark border-secondary mb-2">
+                <div class="card-header small text-info">Vehicle Position</div>
+                <div class="card-body p-2 small">
+                    <div><span class="text-muted">Lat:</span> <span id="gps-lat">@cfg.CurrentLatitude.ToString("F5")</span></div>
+                    <div><span class="text-muted">Lon:</span> <span id="gps-lon">@cfg.CurrentLongitude.ToString("F5")</span></div>
+                    <div><span class="text-muted">Speed:</span> <span id="gps-speed">@cfg.CurrentSpeedMph.ToString("F1")</span> mph</div>
+                    <div><span class="text-muted">Heading:</span> <span id="gps-heading">@cfg.CurrentHeading.ToString("F0")</span>°</div>
+                    <div class="mt-1"><span class="text-muted">Vehicle:</span> @cfg.AutoDisplayName</div>
+                    <div><span class="text-muted">ID:</span> <code class="small">@cfg.VehicleId</code></div>
+                </div>
+            </div>
+            <div class="card bg-dark border-secondary mb-2">
+                <div class="card-header small text-info">Server Stats</div>
+                <div class="card-body p-2 small">
+                    <div><span class="text-muted">Events:</span> <span id="gps-events">@(stats?.Events ?? 0)</span></div>
+                    <div><span class="text-muted">Zones:</span>  <span id="gps-zones">@(stats?.Zones ?? 0)</span></div>
+                    <div><span class="text-muted">Ground:</span> <span id="gps-ground">@(stats?.Ground ?? 0)</span></div>
+                    <div><span class="text-muted">Air:</span>    <span id="gps-air">@(stats?.Air ?? 0)</span></div>
+                </div>
+            </div>
+            <div class="card bg-dark border-secondary">
+                <div class="card-header small text-info">Nearby Vehicles <span id="gps-nearby-count" class="badge bg-secondary ms-1">0</span></div>
+                <div id="gps-nearby-list" class="card-body p-2 small" style="max-height:200px;overflow-y:auto;">
+                    <span class="text-muted">Waiting for data…</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    @if (status == "NotConfigured")
+    {
+        <div class="alert alert-warning mt-2 small">
+            Server not configured. <a asp-controller="Settings" asp-action="Index" class="alert-link">Go to Settings</a> to enter your server URL, API key, and highway ID, then enable Receive.
+        </div>
+    }
+</div>
+
+@* ════════════════════════════════════════════════════════════════════ *@
+@* TAB 2 — Vehicle Details                                             *@
+@* ════════════════════════════════════════════════════════════════════ *@
+<div class="tab-pane fade" id="tab-vehicle">
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card bg-dark border-secondary">
+                <div class="card-header small text-info">Automobile Configuration</div>
+                <div class="card-body p-3">
+                    <table class="table table-sm table-dark table-borderless mb-0">
+                        <tbody>
+                            <tr><td class="text-muted">Display Name</td><td><strong>@cfg.AutoDisplayName</strong></td></tr>
+                            <tr><td class="text-muted">Make</td><td>@(string.IsNullOrWhiteSpace(cfg.AutoMake) ? "—" : cfg.AutoMake)</td></tr>
+                            <tr><td class="text-muted">Model</td><td>@(string.IsNullOrWhiteSpace(cfg.AutoModel) ? "—" : cfg.AutoModel)</td></tr>
+                            <tr><td class="text-muted">Year</td><td>@cfg.AutoYear</td></tr>
+                            <tr><td class="text-muted">Type</td><td><code>@cfg.AutoType</code></td></tr>
+                            <tr><td class="text-muted">AirFlyCar</td><td>
+                                @if (cfg.IsAirFlyCar == "Y") { <span class="badge bg-warning text-dark">Y — Air Fly-Car</span> }
+                                else { <span class="badge bg-secondary">N</span> }
+                            </td></tr>
+                            <tr><td class="text-muted">Vehicle ID</td><td><code class="small">@cfg.VehicleId</code></td></tr>
+                            <tr><td class="text-muted">Device ID</td><td><code class="small">@cfg.DeviceId</code></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header small text-info">Server Connection</div>
+                <div class="card-body p-3">
+                    <table class="table table-sm table-dark table-borderless mb-0">
+                        <tbody>
+                            <tr><td class="text-muted">Server URL</td><td class="text-break small">@(string.IsNullOrWhiteSpace(cfg.ServerBaseUrl) ? "—" : cfg.ServerBaseUrl)</td></tr>
+                            <tr><td class="text-muted">Highway ID</td><td><code>@(string.IsNullOrWhiteSpace(cfg.HighwayId) ? "—" : cfg.HighwayId)</code></td></tr>
+                            <tr><td class="text-muted">API Key</td><td>@(string.IsNullOrWhiteSpace(cfg.DeviceApiKey) ? <span class="text-danger">Not set</span> : <span class="text-success">Set ✓</span>)</td></tr>
+                            <tr><td class="text-muted">Auto-Connect</td><td>@(cfg.AutoConnectOnStartup ? "Yes" : "No")</td></tr>
+                            <tr><td class="text-muted">Receive</td><td>@(cfg.ReceiveEnabled ? $"Every {cfg.ReceivePollSeconds}s" : "Disabled")</td></tr>
+                            <tr><td class="text-muted">Send</td><td>@(cfg.SendEnabled ? $"Every {cfg.SendPollSeconds}s" : "Disabled")</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card bg-dark border-secondary">
+                <div class="card-header small text-info">Live Server Stats</div>
+                <div class="card-body p-3">
+                    @if (stats is not null)
+                    {
+                        <div class="row g-2 text-center">
+                            <div class="col-3"><div class="stat-box"><div class="stat-val">@stats.Zones</div><div class="stat-lbl">Zones</div></div></div>
+                            <div class="col-3"><div class="stat-box"><div class="stat-val">@stats.Events</div><div class="stat-lbl">Events</div></div></div>
+                            <div class="col-3"><div class="stat-box"><div class="stat-val text-success">@stats.Ground</div><div class="stat-lbl">Ground</div></div></div>
+                            <div class="col-3"><div class="stat-box"><div class="stat-val text-info">@stats.Air</div><div class="stat-lbl">Air</div></div></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="text-muted small">No data yet — enable Receive in Settings.</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Automobile input formats from server *@
+        @if (cache?.AutomobileFormats.Count > 0)
+        {
+            <div class="col-12">
+                <div class="card bg-dark border-secondary">
+                    <div class="card-header small text-info">Matched Automobile Data Input Formats (from server)</div>
+                    <div class="card-body p-2">
+                        @foreach (var fmt in cache.AutomobileFormats)
+                        {
+                            <div class="border border-secondary rounded p-2 mb-2">
+                                <div class="fw-semibold small">@fmt.FormatName
+                                    <span class="badge bg-secondary ms-1">@fmt.DataInputType</span>
+                                </div>
+                                <div class="text-muted x-small">@fmt.Description</div>
+                                @if (!string.IsNullOrWhiteSpace(fmt.InputSource))
+                                {
+                                    <code class="small text-info">@fmt.InputSource</code>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@* ════════════════════════════════════════════════════════════════════ *@
+@* TAB 3 — Simulation                                                  *@
+@* ════════════════════════════════════════════════════════════════════ *@
+<div class="tab-pane fade" id="tab-sim">
+    @* Controls row *@
+    <div class="row g-2 mb-2 align-items-end">
+        <div class="col-auto">
+            <button id="sim-start" class="btn btn-success btn-sm">▶ Start</button>
+            <button id="sim-stop"  class="btn btn-danger  btn-sm" disabled>■ Stop</button>
+            <button id="sim-clear" class="btn btn-outline-secondary btn-sm">✕ Clear Route</button>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm mb-1 small">Speed (mph)</label>
+            <input id="sim-speed" type="range" class="form-range" min="5" max="150" value="30" />
+            <div class="text-center small text-muted"><span id="sim-speed-val">30</span> mph</div>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm mb-1 small">Altitude (m)</label>
+            <input id="sim-alt" type="number" class="form-control form-control-sm bg-dark text-light border-secondary" value="0" step="10" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm mb-1 small">Event Type</label>
+            <select id="sim-event-type" class="form-select form-select-sm bg-dark text-light border-secondary">
+                <option value="detection">detection</option>
+                <option value="entry">entry</option>
+                <option value="exit">exit</option>
+                <option value="merge">merge</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm mb-1 small">Step interval (s)</label>
+            <input id="sim-interval" type="number" class="form-control form-control-sm bg-dark text-light border-secondary" value="2" min="1" max="30" />
+        </div>
+        <div class="col-auto d-flex align-items-end pb-1">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sim-airflycar" />
+                <label class="form-check-label small" for="sim-airflycar">AirFlyCar</label>
+            </div>
+        </div>
+        <div class="col-auto d-flex align-items-end">
+            <span id="sim-route-info" class="small text-muted">Click map to add waypoints</span>
+        </div>
+    </div>
+
+    <div class="row g-2">
+        <div class="col-lg-8">
+            <div id="sim-map" style="height:460px;border-radius:6px;border:1px solid #444;"></div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card bg-dark border-secondary h-100">
+                <div class="card-header small text-info d-flex justify-content-between align-items-center">
+                    Simulation Log
+                    <button class="btn btn-outline-secondary btn-sm py-0" onclick="document.getElementById('sim-log').innerHTML=''">Clear</button>
+                </div>
+                <div id="sim-log" class="card-body p-2 small" style="height:420px;overflow-y:auto;font-family:monospace;">
+                    <span class="text-muted">Log appears here once simulation starts.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <p class="text-muted small mt-1">Click anywhere on the map to add waypoints. The vehicle will loop through them. Sends each step to <code>POST /api/events/ingest</code> on the configured server.</p>
+</div>
+
+</div>@* end tab-content *@
+
+@section Scripts {
+<script>
+// ── Shared data from server ───────────────────────────────────────────
+const initLat   = @cfg.CurrentLatitude.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+const initLng   = @cfg.CurrentLongitude.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+const initZones  = @Html.Raw(zonesJson);
+const initEvents = @Html.Raw(eventsJson);
+const pollMs     = @(cfg.ReceiveEnabled ? cfg.ReceivePollSeconds * 1000 : 15000);
+
+// ════════════════ GPS MAP ════════════════════════════════════════════
+let gpsMap, gpsVehicleMarker, gpsZoneLayers = [], gpsEventMarkers = [];
+
+document.querySelector('[data-bs-target="#tab-gps"]').addEventListener('shown.bs.tab', () => {
+    if (!gpsMap) initGpsMap();
+    else gpsMap.invalidateSize();
+});
+document.addEventListener('DOMContentLoaded', () => {
+    // Auto-init GPS map if already on that tab
+    if (document.getElementById('tab-gps').classList.contains('active')) initGpsMap();
+});
+
+function initGpsMap() {
+    gpsMap = L.map('gps-map').setView([initLat, initLng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    }).addTo(gpsMap);
+
+    gpsVehicleMarker = L.circleMarker([initLat, initLng], {
+        radius: 10, color: '#28a745', fillColor: '#28a745', fillOpacity: 0.9, weight: 2
+    }).addTo(gpsMap).bindPopup('<b>Your Vehicle</b><br>' + '@cfg.AutoDisplayName');
+
+    drawGpsZones(initZones);
+    drawGpsEvents(initEvents);
+    setInterval(pollSnapshot, pollMs);
+    pollSnapshot();
+}
+
+function drawGpsZones(zones) {
+    gpsZoneLayers.forEach(l => gpsMap.removeLayer(l));
+    gpsZoneLayers = [];
+    (zones || []).forEach(z => {
+        if (z.lat && z.lon) {
+            const l = L.circle([z.lat, z.lon], {
+                radius: z.radiusM || 300,
+                color: '#0dcaf0', fillOpacity: 0.08, weight: 1
+            }).addTo(gpsMap).bindPopup(z.zoneName || z.zoneId);
+            gpsZoneLayers.push(l);
+        }
+    });
+}
+
+function drawGpsEvents(evts) {
+    gpsEventMarkers.forEach(m => gpsMap.removeLayer(m));
+    gpsEventMarkers = [];
+    let nearby = [];
+    (evts || []).forEach(e => {
+        if (e.lat && e.lon) {
+            const isAir  = e.isAirFlyCar === 'Y';
+            const color  = isAir ? '#ffc107' : (e.mode === 'air' ? '#0dcaf0' : '#adb5bd');
+            const m = L.circleMarker([e.lat, e.lon], {radius: 5, color, fillOpacity: 0.8, weight: 1})
+                .addTo(gpsMap)
+                .bindPopup(`<b>${e.vehicleId || 'Unknown'}</b><br>${e.speedMph?.toFixed(0) ?? '?'} mph — ${e.category}`);
+            gpsEventMarkers.push(m);
+            nearby.push({id: e.vehicleId || '—', speed: e.speedMph?.toFixed(0) ?? '?', cat: e.category, air: isAir});
+        }
+    });
+    document.getElementById('gps-nearby-count').textContent = nearby.length;
+    const list = document.getElementById('gps-nearby-list');
+    list.innerHTML = nearby.length
+        ? nearby.map(n => `<div class="${n.air ? 'text-warning' : 'text-secondary'}">${n.id} — ${n.speed} mph <span class="text-muted">${n.cat}</span></div>`).join('')
+        : '<span class="text-muted">No nearby vehicles</span>';
+}
+
+function pollSnapshot() {
+    fetch('/api/live-snapshot')
+        .then(r => r.json())
+        .then(d => {
+            updateConnBadge(d.status);
+            if (gpsMap) {
+                drawGpsZones(d.zones);
+                drawGpsEvents(d.liveEvents);
+            }
+            if (d.stats) {
+                document.getElementById('gps-events').textContent = d.stats.events;
+                document.getElementById('gps-zones').textContent  = d.stats.zones;
+                document.getElementById('gps-ground').textContent = d.stats.ground;
+                document.getElementById('gps-air').textContent    = d.stats.air;
+            }
+        })
+        .catch(() => {});
+}
+
+// ════════════════ SIMULATION MAP ═════════════════════════════════════
+let simMap, simMarker, simRunning = false, simTimer = null;
+let route = [], routeMarkers = [], routePolyline = null, routeIndex = 0;
+
+document.querySelector('[data-bs-target="#tab-sim"]').addEventListener('shown.bs.tab', () => {
+    if (!simMap) initSimMap();
+    else simMap.invalidateSize();
+});
+
+function initSimMap() {
+    simMap = L.map('sim-map').setView([initLat, initLng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    }).addTo(simMap);
+
+    simMarker = L.marker([initLat, initLng], {
+        icon: carIcon(0),
+        zIndexOffset: 1000
+    }).addTo(simMap).bindPopup('Vehicle');
+
+    // Draw server zones as context
+    (initZones || []).forEach(z => {
+        if (z.lat && z.lon)
+            L.circle([z.lat, z.lon], {radius: z.radiusM || 300, color: '#0dcaf0', fillOpacity: 0.04, weight: 1})
+             .addTo(simMap).bindPopup(z.zoneName);
+    });
+
+    simMap.on('click', e => addWaypoint(e.latlng.lat, e.latlng.lng));
+}
+
+function carIcon(heading) {
+    return L.divIcon({
+        html: `<div style="font-size:22px;transform:rotate(${heading}deg);line-height:1;">🚗</div>`,
+        className: '', iconSize: [24, 24], iconAnchor: [12, 12]
+    });
+}
+
+function addWaypoint(lat, lng) {
+    route.push({lat, lng});
+    const wm = L.circleMarker([lat, lng], {radius: 5, color: '#ffc107', fillOpacity: 0.9, weight: 2})
+        .addTo(simMap).bindPopup(`Waypoint ${route.length}`);
+    routeMarkers.push(wm);
+    updateRouteLine();
+    updateRouteInfo();
+}
+
+function updateRouteLine() {
+    if (routePolyline) simMap.removeLayer(routePolyline);
+    if (route.length >= 2)
+        routePolyline = L.polyline(route.map(p => [p.lat, p.lng]),
+            {color: '#ffc107', weight: 2, dashArray: '5 5'}).addTo(simMap);
+}
+
+function updateRouteInfo() {
+    document.getElementById('sim-route-info').textContent =
+        route.length === 0 ? 'Click map to add waypoints'
+      : route.length === 1 ? '1 waypoint — add at least 1 more'
+      : `${route.length} waypoints`;
+}
+
+document.getElementById('sim-clear').addEventListener('click', () => {
+    stopSim();
+    route = []; routeIndex = 0;
+    routeMarkers.forEach(m => simMap.removeLayer(m)); routeMarkers = [];
+    if (routePolyline) { simMap.removeLayer(routePolyline); routePolyline = null; }
+    updateRouteInfo();
+});
+
+document.getElementById('sim-start').addEventListener('click', startSim);
+document.getElementById('sim-stop').addEventListener('click', stopSim);
+
+document.getElementById('sim-speed').addEventListener('input', function() {
+    document.getElementById('sim-speed-val').textContent = this.value;
+});
+
+function startSim() {
+    if (route.length < 2) { appendLog({ok:false, error:'Add at least 2 waypoints first.'}); return; }
+    simRunning = true;
+    document.getElementById('sim-start').disabled = true;
+    document.getElementById('sim-stop').disabled  = false;
+    simStep();
+}
+
+function stopSim() {
+    simRunning = false;
+    if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+    document.getElementById('sim-start').disabled = false;
+    document.getElementById('sim-stop').disabled  = true;
+}
+
+function simStep() {
+    if (!simRunning) return;
+    const speed     = parseFloat(document.getElementById('sim-speed').value)    || 30;
+    const alt       = parseFloat(document.getElementById('sim-alt').value)       || 0;
+    const evtType   = document.getElementById('sim-event-type').value;
+    const isAirFlyCar = document.getElementById('sim-airflycar').checked ? 'Y' : 'N';
+    const intervalMs  = (parseInt(document.getElementById('sim-interval').value) || 2) * 1000;
+
+    const pos     = route[routeIndex % route.length];
+    const nextPos = route[(routeIndex + 1) % route.length];
+    const heading = calcHeading(pos.lat, pos.lng, nextPos.lat, nextPos.lng);
+
+    simMarker.setLatLng([pos.lat, pos.lng]);
+    simMarker.setIcon(carIcon(heading));
+    simMap.panTo([pos.lat, pos.lng], {animate: true, duration: 0.4});
+
+    fetch('/api/simulate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            latitude: pos.lat, longitude: pos.lng,
+            speedMph: speed, altitudeMeters: alt,
+            eventType: evtType, isAirFlyCar, heading
+        })
+    })
+    .then(r => r.json())
+    .then(d => appendLog({...d, lat: pos.lat.toFixed(5), lng: pos.lng.toFixed(5), speed, evtType}))
+    .catch(err => appendLog({ok: false, error: err.message}));
+
+    routeIndex = (routeIndex + 1) % route.length;
+    simTimer = setTimeout(simStep, intervalMs);
+}
+
+function calcHeading(lat1, lng1, lat2, lng2) {
+    const dL = (lng2 - lng1) * Math.PI / 180;
+    const y  = Math.sin(dL) * Math.cos(lat2 * Math.PI / 180);
+    const x  = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180)
+              - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dL);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function appendLog(entry) {
+    const log  = document.getElementById('sim-log');
+    const time = new Date().toLocaleTimeString();
+    let text;
+    if (entry.ok) {
+        const conf = entry.confidence != null ? `${(entry.confidence * 100).toFixed(0)}%` : '?';
+        text = `<span class="text-success">[${time}] #${entry.id} ${entry.domain}/${entry.category} (${conf})`
+             + ` — ${entry.lat},${entry.lng} @${entry.speed}mph ${entry.evtType}</span>`;
+    } else {
+        text = `<span class="text-danger">[${time}] ✗ ${entry.error}</span>`;
+    }
+    log.insertAdjacentHTML('afterbegin', `<div>${text}</div>`);
+    while (log.children.length > 40) log.removeChild(log.lastChild);
+}
+</script>
+}
