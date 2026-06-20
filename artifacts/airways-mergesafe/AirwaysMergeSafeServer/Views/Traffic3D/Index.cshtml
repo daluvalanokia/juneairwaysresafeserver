@@ -471,9 +471,10 @@ document.getElementById('viewToggle').querySelectorAll('button').forEach(btn => 
     });
 });
 
-// ── Feed-mode Pause/Resume (full implementation) ───────────────────
-// Pausing halts 30-second polling AND live sim injection (feed-mode control).
-// onSimStateChange drives state from BroadcastChannel/storage lifecycle events.
+// ── Feed-mode state machine ────────────────────────────────────────
+//   animationPaused=false → live mode    (button "⏸ Pause",   30s polling ON,  sim injections blocked)
+//   animationPaused=true  → sim-only mode (button "▶ Resume", 30s polling OFF, sim injections allowed)
+// onSimStateChange: sim started → sim-only mode; sim stopped → live mode.
 // Page-load syncs from localStorage so navigating back from DataInputFormats works.
 let animationPaused = false;
 
@@ -481,14 +482,16 @@ function toggleAnimation() {
     animationPaused = !animationPaused;
     var btn = document.getElementById('btnAnimToggle');
     if (btn) btn.textContent = animationPaused ? '▶ Resume' : '⏸ Pause';
-    if (!animationPaused) refreshScene(); // immediate refresh when unpausing
+    if (!animationPaused) refreshScene(); // returning to live mode → load fresh live data
 }
 
 function onSimStateChange(isRunning) {
-    animationPaused = !isRunning;
+    // Sim started → enter sim-only mode: pause live polling, accept sim injections
+    // Sim stopped → return to live mode: resume polling, block injections
+    animationPaused = isRunning;
     var btn = document.getElementById('btnAnimToggle');
-    if (btn) btn.textContent = isRunning ? '⏸ Pause' : '▶ Resume';
-    if (isRunning) refreshScene();
+    if (btn) btn.textContent = isRunning ? '▶ Resume' : '⏸ Pause';
+    if (!isRunning) refreshScene(); // sim stopped → reload with fresh live data
 }
 
 // ── Animate loop ──────────────────────────────────────────────────────
@@ -566,7 +569,7 @@ function _simNorm(evObj, cl) {
 }
 
 function _simInject(evObj, cl) {
-    if (animationPaused) return;   // Feed mode: don't inject when paused
+    if (!animationPaused) return;  // Live mode: ignore sim injections (only allowed in sim-only mode)
     var ev = _simNorm(evObj, cl);
     var vc = classifyLocal(ev);
     if (vc.domain !== 'ground') return;   // ground-only view

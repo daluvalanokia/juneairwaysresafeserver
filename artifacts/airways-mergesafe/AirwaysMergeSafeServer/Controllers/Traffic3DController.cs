@@ -43,11 +43,12 @@ public class Traffic3DController : Controller
             .Where(s => s.ZoneId != null && zoneIds.Contains(s.ZoneId))
             .OrderBy(s => s.ZoneId).ThenBy(s => s.ServerName).ToListAsync();
 
-        // Task 10: ground-only query — excludes air vehicles and IsAirFlyCar="Y"
+        // Task 10: ground-only query — includes ground vehicles OR explicitly non-flycar events
+        // Spec: VehicleMode='ground' OR IsAirFlyCar='N' (OR is intentional: include any record
+        // that is either a ground-mode vehicle or explicitly flagged as non-flycar)
         var recentEvents = await _db.VehicleEvents.AsNoTracking()
             .Where(e => e.HighwayId == highwayId
-                     && e.VehicleMode == "ground"
-                     && e.IsAirFlyCar != "Y")
+                     && (e.VehicleMode == "ground" || e.IsAirFlyCar == "N"))
             .OrderByDescending(e => e.CreatedDate)
             .Take(80)
             .Select(e => new {

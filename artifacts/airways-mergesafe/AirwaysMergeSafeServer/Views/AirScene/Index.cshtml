@@ -953,19 +953,23 @@ function renderAltAxis() {
 let tick = 0;
 let animationPaused = false;
 
+// State machine:
+//   animationPaused=false → live mode   (button "⏸ Pause",   30s polling ON,  sim injections blocked)
+//   animationPaused=true  → sim-only mode (button "▶ Resume", 30s polling OFF, sim injections allowed)
 function toggleAnimation() {
     animationPaused = !animationPaused;
     var btn = document.getElementById('btnAnimToggle');
     if (btn) btn.textContent = animationPaused ? '▶ Resume' : '⏸ Pause';
-    if (!animationPaused) doRefresh(); // immediate live refresh when unpausing
+    if (!animationPaused) doRefresh(); // returning to live mode → load fresh live data
 }
 
 function onSimStateChange(isRunning) {
-    // Sim started → unpause feed so vehicles stream in; sim stopped → auto-pause
-    animationPaused = !isRunning;
+    // Sim started → enter sim-only mode: pause live polling, accept sim injections
+    // Sim stopped → return to live mode: resume polling, block injections
+    animationPaused = isRunning;
     var btn = document.getElementById('btnAnimToggle');
-    if (btn) btn.textContent = isRunning ? '⏸ Pause' : '▶ Resume';
-    if (isRunning) doRefresh();
+    if (btn) btn.textContent = isRunning ? '▶ Resume' : '⏸ Pause';
+    if (!isRunning) doRefresh(); // sim stopped → reload with fresh live data
 }
 
 // ── Animate loop ──────────────────────────────────────────────────────
@@ -1061,7 +1065,7 @@ function _airNorm(evObj, cl) {
 }
 
 function _airInject(evObj, cl) {
-    if (animationPaused) return;   // Feed mode: don't inject when paused
+    if (!animationPaused) return;  // Live mode: ignore sim injections (only allowed in sim-only mode)
 
     var ev = _airNorm(evObj, cl);
     var vc = resolveClass(ev);     // always returns air-domain in AirScene
