@@ -72,7 +72,7 @@ public class DataInputFormatsController : Controller
                 "range_remaining_km","rotor_rpm","rotor_health","motor_temp_c","noise_db",
                 "corridor_id","corridor_deviation_m","conflict_flag","separation_m",
                 "passenger_count","destination_pad","pilot_id","icao_address","squawk",
-                "zone_id","highway_id","event_type","aircar","nic","nac_p"
+                "zone_id","highway_id","event_type","isAirFlyCar","nic","nac_p"
               }
             : new[] {
                 "vehicle_id","timestamp","speed_mph","latitude","longitude",
@@ -113,6 +113,11 @@ public class DataInputFormatsController : Controller
             var zid = !string.IsNullOrEmpty(zoneId)    ? zoneId    : GetStr("zone_id");
             var et  = GetStr("event_type") is { Length: > 0 } e ? e : "detection";
 
+            // Task 10: determine IsAirFlyCar — forced "Y" for airflycar source, or if payload field set
+            var iafRaw = GetStr("isAirFlyCar");
+            var isAirFlyCarVal = (string.Equals(type, "airflycar", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(iafRaw, "Y", StringComparison.OrdinalIgnoreCase)) ? "Y" : "N";
+
             _db.VehicleEvents.Add(new VehicleEvent
             {
                 EventType        = et,
@@ -127,6 +132,8 @@ public class DataInputFormatsController : Controller
                 VehicleMode      = vc.Domain,
                 VehicleCategory  = vc.Category,
                 VehicleClassJson = vcJson[..Math.Min(800, vcJson.Length)],
+                // Task 10: explicit air-fly-car flag
+                IsAirFlyCar      = isAirFlyCarVal,
                 Payload          = payload.Length > 490 ? payload[..490] : payload,
                 CreatedDate      = now
             });

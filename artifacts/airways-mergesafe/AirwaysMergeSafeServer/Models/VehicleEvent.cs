@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace AirwaysMergeSafeServer.Models;
 
 /// <summary>
+/// Task 10: Added IsAirFlyCar (Y/N) field — explicit user-flagged air vehicle.
 /// Phase 6: Added VehicleClass (JSON), VehicleMode, and VehicleCategory columns.
 ///   VehicleMode     — "ground" | "air"  (fast filter for scene rendering)
 ///   VehicleCategory — sedan|suv|truck|motorcycle|van|air_urban|air_express
@@ -31,6 +32,10 @@ public class VehicleEvent
     [MaxLength(20)]  public string  VehicleCategory { get; set; } = "sedan";
     /// <summary>Full VehicleClass JSON — colour, shape, confidence, dimensions</summary>
     [MaxLength(800)] public string? VehicleClassJson { get; set; }
+
+    // ── Task 10: Explicit AirFlyCar flag ──────────────────────────────────
+    /// <summary>"Y" if the event was explicitly flagged as an air fly-car (UAM); "N" otherwise.</summary>
+    [MaxLength(1)]   public string  IsAirFlyCar     { get; set; } = "N";
 
     [MaxLength(500)] public string? Payload         { get; set; }
     public DateTime  CreatedDate    { get; set; } = DateTime.UtcNow;

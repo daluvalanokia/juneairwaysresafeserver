@@ -64,6 +64,8 @@ public class VehicleClassifier
         bool hasVehicleType = false, hasAlt = false, hasSpeed = false, hasLatLon = false;
         bool hasFlightPhase = false, conflictFlag = false;
 
+        bool isAirFlyCarField = false;   // Task 10: isAirFlyCar="Y" in payload
+
         if (!string.IsNullOrEmpty(payloadJson))
         {
             try
@@ -98,12 +100,18 @@ public class VehicleClassifier
                     conflictFlag = cfEl.ValueKind == JsonValueKind.True ||
                                    (cfEl.ValueKind == JsonValueKind.Number && cfEl.GetInt32() != 0) ||
                                    cfEl.GetString() == "true";
+
+                // Task 10: isAirFlyCar="Y" in payload is the highest-priority air signal
+                if (root.TryGetProperty("isAirFlyCar", out var iafEl))
+                    isAirFlyCarField = string.Equals(iafEl.GetString(), "Y", StringComparison.OrdinalIgnoreCase);
             }
             catch { /* non-fatal */ }
         }
 
-        // ── Step 1b (Phase 8): AirFlyCar gate — highest priority ─────────
-        bool isAirFlyCarSource = string.Equals(sourceType, "airflycar", StringComparison.OrdinalIgnoreCase);
+        // ── Step 1b (Phase 8 + Task 10): AirFlyCar gate — highest priority ─
+        // Triggered by sourceType=="airflycar" OR explicit isAirFlyCar="Y" in payload
+        bool isAirFlyCarSource = string.Equals(sourceType, "airflycar", StringComparison.OrdinalIgnoreCase)
+                                 || isAirFlyCarField;
         string domain, category;
 
         if (isAirFlyCarSource)

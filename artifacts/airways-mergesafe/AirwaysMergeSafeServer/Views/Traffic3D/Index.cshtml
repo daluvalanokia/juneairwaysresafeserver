@@ -7,13 +7,6 @@
             lat = z.Latitude, lon = z.Longitude,
             altM = z.AltitudeMeters ?? 0, radius = z.GeofenceRadius
         }));
-    var serversJson = System.Text.Json.JsonSerializer.Serialize(
-        Model.SwitchServers.Select(s => new {
-            serverId = s.ServerId, serverName = s.ServerName,
-            zoneId = s.ZoneId, status = s.Status,
-            altMin = s.AltitudeMinMeters, altMax = s.AltitudeMaxMeters,
-            altWidth = s.AltitudeWidthMeters
-        }));
     var sensorsJson = System.Text.Json.JsonSerializer.Serialize(
         Model.Sensors.Where(s => s.Latitude.HasValue).Select(s => new {
             deviceId = s.DeviceId, deviceName = s.DeviceName,
@@ -27,7 +20,7 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
     <div>
         <h4 class="mb-0">🏗 3D Traffic Scene</h4>
-        <small class="text-muted">Classification-aware rendering · Ground &amp; Air vehicles</small>
+        <small class="text-muted">Ground vehicles · Classification-aware rendering</small>
     </div>
     <div class="d-flex gap-2 align-items-center flex-wrap">
         <select id="hwSel" class="form-select form-select-sm" style="width:210px"
@@ -47,13 +40,8 @@
             <button class="btn btn-outline-primary"   data-view="top"         title="Top / Plan">⊞ Top</button>
             <button class="btn btn-outline-primary"   data-view="split"       title="All three panels">⊟ Split</button>
         </div>
-        <!-- Domain filter -->
-        <div class="btn-group btn-group-sm" id="domainFilter">
-            <button class="btn btn-secondary active" data-domain="all"    title="All">All</button>
-            <button class="btn btn-outline-info"     data-domain="ground" title="Ground only">🚗</button>
-            <button class="btn btn-outline-warning"  data-domain="air"    title="Air only">✈</button>
-        </div>
-        <a href="/Traffic3D/AirScene" class="btn btn-sm btn-outline-warning">🛫 Air Scene</a>
+        <a href="/AirScene" class="btn btn-sm btn-outline-warning">🛫 Air Scene</a>
+        <button id="btnAnimToggle" class="btn btn-sm btn-outline-warning" onclick="toggleAnimation()">⏸ Pause</button>
         <button class="btn btn-sm btn-outline-success" onclick="refreshScene()">⟳ Live</button>
     </div>
 </div>
@@ -78,19 +66,15 @@
             <div class="card-body py-2 px-3">
                 <h6 class="mb-2">🔑 Classification Legend</h6>
                 <div class="d-flex flex-wrap gap-2" id="classLegend">
-                    <!-- Ground -->
                     <span class="badge rounded-pill px-3 py-2" style="background:#3b82f6">sedan</span>
                     <span class="badge rounded-pill px-3 py-2" style="background:#22c55e">suv</span>
                     <span class="badge rounded-pill px-3 py-2" style="background:#f59e0b;color:#000">truck</span>
                     <span class="badge rounded-pill px-3 py-2" style="background:#a855f7">motorcycle</span>
                     <span class="badge rounded-pill px-3 py-2" style="background:#64748b">van</span>
-                    <span class="badge rounded-pill px-3 py-2 ms-3" style="background:#00bcd4;color:#000">✈ air_urban</span>
-                    <span class="badge rounded-pill px-3 py-2" style="background:#ff6b35">✈ air_express</span>
                 </div>
                 <!-- Stats bar -->
                 <div class="d-flex flex-wrap gap-3 mt-2 small text-muted" id="statsRow">
                     <span>Ground: <b id="statGround">–</b></span>
-                    <span>Air: <b id="statAir">–</b></span>
                     <span>Zones: <b>@Model.Zones.Count</b></span>
                     <span>Sensors: <b>@Model.Sensors.Count</b></span>
                     <span>Highway: <b>@(Model.SelectedHighwayId ?? "–")</b></span>
@@ -111,43 +95,23 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ══════════════════════════════════════════════════════════════════════
-   CLASSIFICATION-AWARE 3D TRAFFIC SCENE
-   ══════════════════════════════════════════════════════════════════════
-   Algorithm (mirrors VehicleClassifier.cs):
-     1. altitude_m > 10  → air   (≤150 = air_urban, >150 = air_express)
-     2. vehicle_type field → direct category map
-     3. speed_mph heuristic → motorcycle/sedan/suv/truck/van
-     4. VehicleClassJson from API overrides all (stored classification)
-
-   Geometry per category (Three.js):
-     sedan       → BoxGeometry  1.6×0.8×0.4   colour #3b82f6
-     suv         → BoxGeometry  1.9×0.9×0.55  colour #22c55e
-     truck       → BoxGeometry  2.4×0.95×0.75 colour #f59e0b
-     motorcycle  → CylinderGeom 0.6×0.3       colour #a855f7
-     van         → BoxGeometry  2.1×1.0×1.0   colour #64748b
-     air_urban   → ConeGeom(inv)0.5            colour #00bcd4
-     air_express → Octahedron   0.6            colour #ff6b35
-
-   Views:
-     Perspective  – full 3D, orbit controls
-     Side (elev.) – orthographic +X → shows altitude stacking
-     Top (plan)   – orthographic ↓  → shows lane spread
-     Split        – all three in one canvas (left 42%, mid 29%, right 29%)
+   GROUND-ONLY 3D TRAFFIC SCENE  (Task 10 rewrite)
+   Air vehicles are shown in the dedicated Air Scene (/AirScene).
+   Bug fixes: Pause/Resume, BroadcastChannel filter, gated interval,
+              separate storage listener for airways_sim_active.
    ══════════════════════════════════════════════════════════════════════ */
 
 const ALT_SCALE = 0.05;
 const XZ_SCALE  = 800;
 const HW        = '@hw';
 
-// ── Geometry + colour factory ─────────────────────────────────────────
+// ── Ground vehicle geometry + colour factory ──────────────────────────
 const CAT_SPEC = {
     sedan:       { color:'#3b82f6', geo:()=>new THREE.BoxGeometry(1.6,0.4,0.8) },
     suv:         { color:'#22c55e', geo:()=>new THREE.BoxGeometry(1.9,0.55,0.9) },
     truck:       { color:'#f59e0b', geo:()=>new THREE.BoxGeometry(2.4,0.75,0.95) },
     motorcycle:  { color:'#a855f7', geo:()=>new THREE.CylinderGeometry(0.15,0.15,0.5,8) },
     van:         { color:'#64748b', geo:()=>new THREE.BoxGeometry(2.1,1.0,1.0) },
-    air_urban:   { color:'#00bcd4', geo:()=>new THREE.ConeGeometry(0.5,0.9,6) },
-    air_express: { color:'#ff6b35', geo:()=>new THREE.OctahedronGeometry(0.6) },
 };
 const DEFAULT_SPEC = CAT_SPEC.sedan;
 
@@ -157,34 +121,28 @@ function getSpec(vc) {
     return CAT_SPEC[cat] || DEFAULT_SPEC;
 }
 
-// ── JS-side classifier (mirrors C# VehicleClassifier, used as fallback) ─
+// ── JS-side ground classifier ─────────────────────────────────────────
 function classifyLocal(ev) {
-    // Use stored classification if available
     if (ev.vehicleClassJson) {
         try {
             const vc = typeof ev.vehicleClassJson === 'string'
                 ? JSON.parse(ev.vehicleClassJson) : ev.vehicleClassJson;
-            if (vc && vc.category) return vc;
+            if (vc && vc.category && vc.domain === 'ground') return vc;
         } catch(e) {}
     }
-    if (ev.vehicleCategory && ev.vehicleMode)
-        return { category: ev.vehicleCategory, domain: ev.vehicleMode, color: CAT_SPEC[ev.vehicleCategory]?.color || '#3b82f6' };
+    if (ev.vehicleCategory && ev.vehicleMode === 'ground')
+        return { category: ev.vehicleCategory, domain: 'ground',
+                 color: CAT_SPEC[ev.vehicleCategory]?.color || '#3b82f6' };
 
-    // Step 1: Altitude gate
-    const alt = ev.altitudeMeters ?? ev.altitudeM ?? null;
-    if (alt !== null && alt > 10)
-        return { category: alt <= 150 ? 'air_urban' : 'air_express', domain: 'air',
-                 color: alt <= 150 ? '#00bcd4' : '#ff6b35' };
-
-    // Step 3: Speed heuristic
+    // Speed heuristic — ground only
     const s = ev.speedMph;
     let cat = 'sedan';
     if (s !== null && s !== undefined) {
-        if (s <= 25) cat = 'motorcycle';
+        if (s <= 25)      cat = 'motorcycle';
         else if (s <= 55) cat = 'sedan';
         else if (s <= 75) cat = 'suv';
         else if (s <= 90) cat = 'truck';
-        else cat = 'van';
+        else              cat = 'van';
     }
     return { category: cat, domain: 'ground', color: CAT_SPEC[cat]?.color || '#3b82f6' };
 }
@@ -203,7 +161,7 @@ const dir = new THREE.DirectionalLight(0xffffff, 0.9);
 dir.position.set(60, 200, 80); scene.add(dir);
 scene.add(new THREE.GridHelper(500, 50, 0x1a1a2e, 0x111133));
 
-// Static zones
+// Static zone markers
 const ZONES = @Html.Raw(zonesJson);
 ZONES.forEach(z => {
     if (!z.lat || !z.lon) return;
@@ -215,9 +173,8 @@ ZONES.forEach(z => {
         transparent: true, opacity: 0.18, depthWrite: false
     });
     const mesh = new THREE.Mesh(cy, cm);
-    mesh.position.set(p.x, 0.1 + z.altM * ALT_SCALE, p.z);
+    mesh.position.set(p.x, 0.1, p.z);
     scene.add(mesh);
-    // Zone ring
     const ring = new THREE.Mesh(
         new THREE.TorusGeometry(r, 0.15, 8, 48),
         new THREE.MeshPhongMaterial({ color: 0x22c55e, opacity: 0.5, transparent: true })
@@ -227,25 +184,10 @@ ZONES.forEach(z => {
     scene.add(ring);
 });
 
-// Altitude band planes (from SwitchServers)
-const SERVERS = @Html.Raw(serversJson);
-SERVERS.filter(s => s.altMin && s.altMax).forEach((s, i) => {
-    const h   = (s.altMax - s.altMin) * ALT_SCALE;
-    const midY = ((s.altMin + s.altMax) / 2) * ALT_SCALE;
-    const hue = (i * 137.5) % 360;
-    const col = new THREE.Color(`hsl(${hue},70%,55%)`);
-    const geo  = new THREE.BoxGeometry((s.altWidth || 30) * ALT_SCALE * 20, h, 300);
-    const mat  = new THREE.MeshPhongMaterial({ color: col, transparent: true, opacity: 0.10, depthWrite: false });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(i * 12 - (SERVERS.length * 6), midY, 0);
-    scene.add(mesh);
-});
-
 // ── Vehicle mesh management ───────────────────────────────────────────
 const vehicleMeshes = [], vehicleData = [];
 const raycaster = new THREE.Raycaster();
 const mouse2    = new THREE.Vector2();
-let domainFilter = 'all';
 let selectedVehicleMesh = null;
 
 function buildVehicleMesh(ev) {
@@ -257,13 +199,8 @@ function buildVehicleMesh(ev) {
 
     const p = (ev.latitude && ev.longitude) ? norm(ev.latitude, ev.longitude)
               : { x: (Math.random()-0.5)*180, z: (Math.random()-0.5)*180 };
-    const altY = vc.domain === 'air' ? (ev.altitudeMeters || 50) * ALT_SCALE : 0.3;
-    mesh.position.set(p.x, altY, p.z);
-
-    // Rotate air vehicles slightly
-    if (vc.domain === 'air') mesh.rotation.y = Math.random() * Math.PI * 2;
-
-    mesh.userData = { ev, vc, baseY: altY, idx: vehicleMeshes.length };
+    mesh.position.set(p.x, 0.3, p.z);
+    mesh.userData = { ev, vc, baseY: 0.3, idx: vehicleMeshes.length };
     return mesh;
 }
 
@@ -271,34 +208,31 @@ function loadEvents(events) {
     vehicleMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
     vehicleMeshes.length = 0; vehicleData.length = 0;
 
-    let gCount = 0, aCount = 0;
+    let gCount = 0;
+    const lats = [], lons = [];
     events.forEach(ev => {
         const vc = classifyLocal(ev);
-        if (domainFilter !== 'all' && vc.domain !== domainFilter) return;
+        if (vc.domain !== 'ground') return;   // ground-only view
+        if (ev.latitude) lats.push(ev.latitude);
+        if (ev.longitude) lons.push(ev.longitude);
         const mesh = buildVehicleMesh(ev);
         scene.add(mesh);
         vehicleMeshes.push(mesh);
         vehicleData.push({ ev, vc });
-        if (vc.domain === 'air') aCount++; else gCount++;
+        gCount++;
     });
+    if (lats.length) {
+        midLat = lats.reduce((a,b)=>a+b,0)/lats.length;
+        midLon = lons.reduce((a,b)=>a+b,0)/lons.length;
+    }
     document.getElementById('statGround').textContent = gCount;
-    document.getElementById('statAir').textContent    = aCount;
 }
 
 async function refreshScene() {
     try {
         const r = await fetch(`/api/events/live?highwayId=${HW}&take=100`);
         if (!r.ok) return;
-        const evs = await r.json();
-        if (evs.length > 0) {
-            const lats = evs.filter(e=>e.latitude).map(e=>e.latitude);
-            const lons = evs.filter(e=>e.longitude).map(e=>e.longitude);
-            if (lats.length) {
-                midLat = lats.reduce((a,b)=>a+b,0)/lats.length;
-                midLon = lons.reduce((a,b)=>a+b,0)/lons.length;
-            }
-        }
-        loadEvents(evs);
+        loadEvents(await r.json());
     } catch(e) { console.warn('Scene refresh error:', e); }
 }
 
@@ -308,16 +242,13 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 
-// Perspective cam
 const camP = new THREE.PerspectiveCamera(58, canvas.clientWidth/canvas.clientHeight, 0.1, 3000);
 camP.position.set(100, 80, 180); camP.lookAt(0, 20, 0);
 
-// Side cam (elevation, orthographic, looking along -X)
 const oW = 160, oH = 120;
 const camS = new THREE.OrthographicCamera(-oW, oW, oH, -oH, 0.1, 2000);
 camS.position.set(500, 0, 0); camS.lookAt(0, 0, 0);
 
-// Top cam (plan, looking straight down)
 const camT = new THREE.OrthographicCamera(-oW, oW, oH, -oH, 0.1, 2000);
 camT.position.set(0, 600, 0); camT.up.set(0, 0, -1); camT.lookAt(0, 0, 0);
 
@@ -327,8 +258,6 @@ let currentView = 'perspective';
 function setViewport(view) {
     currentView = view;
     const w = renderer.domElement.clientWidth;
-    const h = renderer.domElement.clientHeight;
-    // Show/hide split labels
     document.getElementById('labelA').style.display = view === 'split' ? '' : 'none';
     document.getElementById('labelB').style.display = view === 'split' ? '' : 'none';
     document.getElementById('labelC').style.display = view === 'split' ? '' : 'none';
@@ -350,7 +279,6 @@ window.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('wheel', e => { radius = Math.max(60, Math.min(700, radius + e.deltaY * 0.25)); });
 
-// Hover: pointer cursor over vehicles
 canvas.addEventListener('mousemove', e => {
     if (isDrag) return;
     const rect = canvas.getBoundingClientRect();
@@ -397,13 +325,9 @@ function showInspector({ ev, vc }) {
     const conf    = vc.confidence ?? vc.Confidence ?? 0;
     const confPct = Math.round(conf * 100);
     const confCls = conf < 0.4 ? 'danger' : conf < 0.65 ? 'warning' : 'success';
-    const isAir   = vc.domain === 'air';
     document.getElementById('inspector').innerHTML = `
     <table class="table table-sm table-borderless mb-0 small">
       <tr><td class="text-muted">Vehicle ID</td><td><b>${ev.vehicleId||'—'}</b></td></tr>
-      <tr><td class="text-muted">Domain</td><td>
-        <span class="badge" style="background:${isAir?'#ff6b35':'#3b82f6'}">${vc.domain}</span>
-      </td></tr>
       <tr><td class="text-muted">Category</td><td>
         <span class="badge" style="background:${vc.color||'#64748b'}">${vc.category}</span>
       </td></tr>
@@ -417,13 +341,10 @@ function showInspector({ ev, vc }) {
         ${conf < 0.4 ? '<small class="text-danger">⚠ low confidence</small>' : ''}
       </td></tr>
       <tr><td class="text-muted">Speed</td><td>${ev.speedMph!=null?ev.speedMph.toFixed(1)+' mph':'—'}</td></tr>
-      <tr><td class="text-muted">Altitude</td><td>${ev.altitudeMeters!=null?ev.altitudeMeters.toFixed(1)+' m':'ground'}</td></tr>
       <tr><td class="text-muted">Event</td><td>${ev.eventType||'—'}</td></tr>
       <tr><td class="text-muted">Zone</td><td>${ev.zoneId||'—'}</td></tr>
     </table>`;
 }
-
-// ── Click-to-inspect helpers ──────────────────────────────────────────
 
 function clearVehicleHighlight(mesh) {
     if (!mesh || !mesh.material || !mesh.material.emissive) return;
@@ -455,31 +376,22 @@ function showVehicleDetail({ ev, vc }, cx, cy) {
     var conf     = (vc.confidence ?? vc.Confidence ?? 0);
     var confPct  = Math.round(conf * 100);
     var confClr  = conf < 0.4 ? '#ef4444' : conf < 0.65 ? '#f59e0b' : '#22c55e';
-    var isAir    = vc.domain === 'air';
-    var srcType  = (ev && ev.srcType) || '';
-    var srcBadge = srcType === 'sim'
-        ? '<span style="background:#f59e0b;color:#000;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:700;margin-left:4px">SIM</span>'
-        : (ev && ev.vehicleId
-            ? '<span style="background:#22c55e;color:#000;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:700;margin-left:4px">LIVE</span>'
-            : '<span style="background:#475569;color:#fff;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:700;margin-left:4px">AMBIENT</span>');
+    var srcBadge = (ev && ev.vehicleId)
+        ? '<span style="background:#22c55e;color:#000;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:700;margin-left:4px">LIVE</span>'
+        : '<span style="background:#475569;color:#fff;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:700;margin-left:4px">AMBIENT</span>';
 
-    document.getElementById('vdTitle').innerHTML =
-        (isAir ? '✈' : '🚗') + ' ' + (vc.category || 'Vehicle') + srcBadge;
+    document.getElementById('vdTitle').innerHTML = '🚗 ' + (vc.category || 'Vehicle') + srcBadge;
 
-    var domBadge  = '<span style="background:' + (isAir ? '#ff6b35' : '#3b82f6') + ';color:#fff;padding:1px 6px;border-radius:3px;font-size:.68rem">' + vc.domain + '</span>';
-    var catBadge  = '<span style="background:' + (vc.color || '#64748b') + ';color:#fff;padding:1px 6px;border-radius:3px;font-size:.68rem">' + vc.category + '</span>';
-    var confBar   = '<div style="display:flex;align-items:center;gap:5px">'
-                  + '<div style="flex:1;height:4px;background:rgba(255,255,255,.12);border-radius:2px">'
-                  + '<div style="width:' + confPct + '%;height:4px;background:' + confClr + ';border-radius:2px"></div></div>'
-                  + '<span style="font-size:.68rem;color:#cbd5e1">' + confPct + '%</span></div>';
+    var confBar = '<div style="display:flex;align-items:center;gap:5px">'
+        + '<div style="flex:1;height:4px;background:rgba(255,255,255,.12);border-radius:2px">'
+        + '<div style="width:' + confPct + '%;height:4px;background:' + confClr + ';border-radius:2px"></div></div>'
+        + '<span style="font-size:.68rem;color:#cbd5e1">' + confPct + '%</span></div>';
 
     var rows = [
         ['Vehicle ID', (ev && ev.vehicleId) || '—'],
-        ['Domain',     domBadge],
-        ['Category',   catBadge],
-        ['Confidence', confBar],
-        ['Speed',      ev && ev.speedMph    != null ? ev.speedMph.toFixed(1)    + ' mph' : '—'],
-        ['Altitude',   ev && ev.altitudeMeters != null ? ev.altitudeMeters.toFixed(1) + ' m' : 'ground'],
+        ['Category',   '<span style="background:' + (vc.color||'#64748b') + ';color:#fff;padding:1px 6px;border-radius:3px;font-size:.68rem">' + vc.category + '</span>'],
+        ['Confidence', confPct > 0 ? confBar : '—'],
+        ['Speed',      ev && ev.speedMph != null ? ev.speedMph.toFixed(1) + ' mph' : '—'],
         ['Event',      (ev && ev.eventType) || '—'],
         ['Zone',       (ev && ev.zoneId)    || '—'],
     ];
@@ -493,9 +405,8 @@ function showVehicleDetail({ ev, vc }, cx, cy) {
     document.getElementById('vdRawPre').textContent = JSON.stringify({ ev: ev, vc: vc }, null, 2);
     vdSwitchTab('fmt');
 
-    // Position container-relative — fixes Eyeways viewport-coord bug
     var wrapRect = wrap.getBoundingClientRect();
-    var panW = 304, panH = 290;
+    var panW = 304, panH = 240;
     var px = cx - wrapRect.left + 12;
     var py = cy - wrapRect.top  + 12;
     if (px + panW > wrapRect.width)  px = cx - wrapRect.left - panW - 4;
@@ -505,7 +416,6 @@ function showVehicleDetail({ ev, vc }, cx, cy) {
     panel.style.display = '';
 }
 
-// Build floating detail panel inside canvas container (runs once at page load)
 (function() {
     var wrap = document.getElementById('sceneWrap');
     if (!wrap) return;
@@ -532,19 +442,14 @@ function showVehicleDetail({ ev, vc }, cx, cy) {
                 'style="flex:1;padding:5px;font-size:.7rem;font-weight:600;' +
                 'background:transparent;border:none;color:#64748b;cursor:pointer">Raw JSON</button>' +
         '</div>' +
-        '<div id="vdBodyFmt" style="padding:10px 12px;max-height:260px;overflow-y:auto"></div>' +
-        '<div id="vdBodyRaw" style="display:none;padding:10px 12px;max-height:260px;overflow-y:auto">' +
+        '<div id="vdBodyFmt" style="padding:10px 12px;max-height:220px;overflow-y:auto"></div>' +
+        '<div id="vdBodyRaw" style="display:none;padding:10px 12px;max-height:220px;overflow-y:auto">' +
             '<pre id="vdRawPre" style="font-size:.6rem;color:#94a3b8;white-space:pre-wrap;' +
                 'word-break:break-all;margin:0;line-height:1.5"></pre>' +
         '</div>';
     p.addEventListener('click', function(e) { e.stopPropagation(); });
     wrap.appendChild(p);
-
-    // Escape key dismiss
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') closeVehicleDetail();
-    });
-    // Outside-page dismiss (capture phase) — fixes aa04614 follow-up gap
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeVehicleDetail(); });
     document.addEventListener('click', function(e) {
         var panel = document.getElementById('vehicleDetailPanel');
         if (!panel || panel.style.display === 'none') return;
@@ -552,21 +457,6 @@ function showVehicleDetail({ ev, vc }, cx, cy) {
         if (cont && !cont.contains(e.target)) closeVehicleDetail();
     }, true);
 })();
-
-// ── Domain filter buttons ─────────────────────────────────────────────
-document.getElementById('domainFilter').querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('#domainFilter button').forEach(b => {
-            b.classList.remove('active','btn-secondary','btn-info','btn-warning');
-            b.classList.add('btn-outline-' + (b.dataset.domain === 'ground' ? 'info' : b.dataset.domain === 'air' ? 'warning' : 'secondary'));
-        });
-        btn.classList.add('active');
-        btn.classList.remove('btn-outline-secondary','btn-outline-info','btn-outline-warning');
-        btn.classList.add(btn.dataset.domain === 'ground' ? 'btn-info' : btn.dataset.domain === 'air' ? 'btn-warning' : 'btn-secondary');
-        domainFilter = btn.dataset.domain;
-        refreshScene();
-    });
-});
 
 // ── View mode toggle ──────────────────────────────────────────────────
 document.getElementById('viewToggle').querySelectorAll('button').forEach(btn => {
@@ -581,44 +471,56 @@ document.getElementById('viewToggle').querySelectorAll('button').forEach(btn => 
     });
 });
 
+// ── Bug Fix 1: Pause/Resume animation ────────────────────────────────
+let animationPaused = false;
+
+function toggleAnimation() {
+    animationPaused = !animationPaused;
+    var btn = document.getElementById('btnAnimToggle');
+    if (btn) btn.textContent = animationPaused ? '▶ Resume' : '⏸ Pause';
+}
+
+function onSimStateChange(isRunning) {
+    var btn = document.getElementById('btnAnimToggle');
+    if (!btn) return;
+    // Auto-resume when a sim starts so vehicles visibly animate
+    if (isRunning && animationPaused) {
+        animationPaused = false;
+        btn.textContent = '⏸ Pause';
+    }
+}
+
 // ── Animate loop ──────────────────────────────────────────────────────
 let tick = 0, camTween = null;
 function animate() {
     requestAnimationFrame(animate); tick++;
     if (camTween) camTween();
 
-    // Orbit perspective cam
     camP.position.x = radius * Math.sin(theta) * Math.cos(phi);
     camP.position.y = radius * Math.sin(phi);
     camP.position.z = radius * Math.cos(theta) * Math.cos(phi);
     camP.lookAt(0, 20, 0);
 
-    // Vehicle animation — ground vehicles idle bob; air vehicles gentle drift
-    vehicleMeshes.forEach((m, i) => {
-        const { vc, baseY } = m.userData;
-        if (vc.domain === 'air') {
-            m.position.y = baseY + Math.sin(tick * 0.025 + i * 0.8) * 1.5;
-            m.rotation.y += 0.005;
-        } else {
+    // Bug Fix 3 (partial): vehicle bob is gated by animationPaused
+    if (!animationPaused) {
+        vehicleMeshes.forEach((m, i) => {
+            const { baseY } = m.userData;
             m.position.y = baseY + Math.sin(tick * 0.04 + i) * 0.05;
-        }
-    });
+        });
+    }
 
     const cw = renderer.domElement.clientWidth;
     const ch = renderer.domElement.clientHeight;
     renderer.setSize(cw, ch, false);
 
     if (currentView === 'split') {
-        // Panel A — Perspective (left 42%)
         renderer.setViewport(0, 0, cw*0.42, ch);
         renderer.setScissor(0, 0, cw*0.42, ch);
         renderer.setScissorTest(true);
         renderer.render(scene, camP);
-        // Panel B — Side (mid 29%)
         renderer.setViewport(cw*0.43, 0, cw*0.28, ch);
         renderer.setScissor(cw*0.43, 0, cw*0.28, ch);
         renderer.render(scene, camS);
-        // Panel C — Top (right 29%)
         renderer.setViewport(cw*0.72, 0, cw*0.28, ch);
         renderer.setScissor(cw*0.72, 0, cw*0.28, ch);
         renderer.render(scene, camT);
@@ -638,12 +540,10 @@ function animate() {
     setViewport('perspective');
 })();
 
-// Auto-refresh every 30 s
-setInterval(refreshScene, 30000);
+// Bug Fix 3: Gate 30-second auto-refresh when animation is paused
+setInterval(function() { if (!animationPaused) refreshScene(); }, 30000);
 
 // ── Live simulation feed ───────────────────────────────────────────────
-// Defined outside BroadcastChannel block so the localStorage 'storage'
-// fallback can also call them when the user navigates between pages.
 function _simNorm(evObj, cl) {
     var ev = Object.assign({}, evObj);
     if (cl) {
@@ -667,23 +567,18 @@ function _simNorm(evObj, cl) {
 function _simInject(evObj, cl) {
     var ev = _simNorm(evObj, cl);
     var vc = classifyLocal(ev);
-    if (domainFilter !== 'all' && vc.domain !== domainFilter) return;
+    if (vc.domain !== 'ground') return;   // ground-only view
 
     var mesh = buildVehicleMesh(ev);
     scene.add(mesh);
     vehicleMeshes.push(mesh);
 
-    // Update stat counters
     var gEl = document.getElementById('statGround');
-    var aEl = document.getElementById('statAir');
-    if (vc.domain === 'air') aEl.textContent = (+aEl.textContent||0) + 1;
-    else                     gEl.textContent = (+gEl.textContent||0) + 1;
+    gEl.textContent = (+gEl.textContent||0) + 1;
 
-    // Flash overlay label
     var lbl = document.getElementById('simLiveLabel');
     if (lbl) { lbl.style.opacity = '1'; setTimeout(function(){ lbl.style.opacity = '0'; }, 2500); }
 
-    // ── Perspective close-up fly-in ───────────────────────────────
     var startR = radius, startP = phi;
     var targR  = Math.max(18, startR * 0.12);
     var targP  = Math.max(0.15, Math.min(0.55, startP));
@@ -712,28 +607,31 @@ function _simInject(evObj, cl) {
     };
 }
 
-// BroadcastChannel — works when both pages are open simultaneously
+// Bug Fix 2: BroadcastChannel — only call onSimStateChange for lifecycle events,
+// NOT for every sim_vehicle message (which caused Pause↔Resume flicker)
 if (typeof BroadcastChannel !== 'undefined') {
     var _simBc = new BroadcastChannel('airways_sim');
     _simBc.onmessage = function(e) {
         if (!e.data) return;
-        // airflycar events are handled exclusively by AirScene
         if (e.data.type === 'sim_vehicle' && e.data.payload && e.data.srcType !== 'airflycar')
             _simInject(e.data.payload, e.data.classification);
-        if (e.data.type === 'sim_started') refreshScene();
+        if (e.data.type === 'sim_started') {
+            if (!animationPaused) refreshScene();
+            onSimStateChange(true);
+        }
+        if (e.data.type === 'sim_stopped') onSimStateChange(false);
     };
 }
 
-// localStorage fallback — fires via 'storage' event when DataInputFormats
-// writes a sim event even after the user has navigated away from that page
+// Bug Fix 4: Separate storage listener for airways_sim_active (sim lifecycle state)
+// and airways_sim_last_event (vehicle payloads). Previously mixed → dead sim_started check.
 window.addEventListener('storage', function(e) {
+    if (e.key === 'airways_sim_active') { onSimStateChange(e.newValue === 'true'); return; }
     if (e.key !== 'airways_sim_last_event' || !e.newValue) return;
     try {
         var msg = JSON.parse(e.newValue);
-        // airflycar events are handled exclusively by AirScene
         if (msg.type === 'sim_vehicle' && msg.payload && msg.srcType !== 'airflycar')
             _simInject(msg.payload, msg.classification);
-        if (msg.type === 'sim_started') refreshScene();
     } catch(ex) {}
 });
 </script>

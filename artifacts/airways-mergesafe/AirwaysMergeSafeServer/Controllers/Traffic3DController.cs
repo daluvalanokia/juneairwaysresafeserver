@@ -73,55 +73,13 @@ public class Traffic3DController : Controller
         });
     }
 
+    /// <summary>
+    /// Task 10: AirScene is now fully independent at /AirScene.
+    /// This action redirects legacy links gracefully.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> AirScene(string? highwayId)
-    {
-        var highways = await _db.Highways.AsNoTracking().Where(h => h.IsActive).OrderBy(h => h.Name).ToListAsync();
-        highwayId ??= HttpContext.Session.GetString("HighwayId") ?? highways.FirstOrDefault()?.HighwayId;
-
-        var zones   = await _db.MergeZones.AsNoTracking().Where(z => z.HighwayId == highwayId).ToListAsync();
-        var sensors = await _db.SensorDevices.AsNoTracking().Where(d => d.HighwayId == highwayId).ToListAsync();
-        var zoneIds = zones.Select(z => z.ZoneId).ToList();
-        var servers = await _db.SwitchServers.AsNoTracking()
-            .Where(s => s.ZoneId != null && zoneIds.Contains(s.ZoneId))
-            .OrderBy(s => s.ZoneId).ThenBy(s => s.ServerName).ToListAsync();
-
-        // P6: air events + classified ground for comparison panel
-        var recentEvents = await _db.VehicleEvents.AsNoTracking()
-            .Where(e => e.HighwayId == highwayId)
-            .OrderByDescending(e => e.CreatedDate)
-            .Take(120)
-            .Select(e => new {
-                e.Id, e.VehicleId, e.EventType, e.ZoneId,
-                e.SpeedMph, e.Latitude, e.Longitude, e.AltitudeMeters,
-                e.VehicleMode, e.VehicleCategory, e.VehicleClassJson,
-                e.CreatedDate
-            })
-            .ToListAsync();
-
-        var groundCount = recentEvents.Count(e => e.VehicleMode == "ground");
-        var airCount    = recentEvents.Count(e => e.VehicleMode == "air");
-
-        // Category breakdown for the inspector legend
-        var catBreakdown = recentEvents
-            .GroupBy(e => e.VehicleCategory)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        return View(new Traffic3DViewModel
-        {
-            Highways           = highways,
-            SelectedHighwayId  = highwayId,
-            Zones              = zones,
-            SwitchServers      = servers,
-            Sensors            = sensors,
-            TomTomApiKey       = _cfg["TomTomApiKey"],
-            RecentEventsJson   = JsonSerializer.Serialize(recentEvents),
-            GroundCount        = groundCount,
-            AirCount           = airCount,
-            CategoryBreakdown  = catBreakdown,
-            AirSceneAlertsJson = AirwaysMergeSafeServer.Controllers.SettingsController.LoadAirSceneAlertsJson()
-        });
-    }
+    public IActionResult AirScene(string? highwayId)
+        => RedirectToAction("Index", "AirScene", new { highwayId });
 
     [HttpGet]
     public async Task<IActionResult> GetTrafficSegments(string highwayId, string? bbox)

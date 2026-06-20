@@ -203,6 +203,7 @@ namespace AirwaysMergeSafeServer.Migrations
                 b.Property<string>("VehicleId").HasMaxLength(50).HasColumnType("TEXT");
                 b.Property<string>("VehicleMode").IsRequired().HasMaxLength(10).HasColumnType("TEXT");
                 b.Property<string>("ZoneId").HasMaxLength(50).HasColumnType("TEXT");
+                b.Property<string>("IsAirFlyCar").IsRequired().HasMaxLength(1).HasColumnType("TEXT");
                 b.HasKey("Id");
                 b.HasIndex("CreatedDate");
                 b.HasIndex("HighwayId");
