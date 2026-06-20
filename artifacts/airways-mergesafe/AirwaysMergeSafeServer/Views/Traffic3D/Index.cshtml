@@ -386,7 +386,14 @@ let selectedVehicleMesh = null;
 // Lane centre Z positions (4 lanes: 2 eastbound, 2 westbound)
 const LANE_Z = [-27, -9, 9, 27];
 
-function buildVehicleMesh(ev) {
+// Deterministic lane keyed to vehicleId — same vehicle keeps same lane across refreshes
+function stableLane(vid) {
+    var h = 0;
+    for (var i = 0; i < (vid || '').length; i++) h = (h * 31 + vid.charCodeAt(i)) | 0;
+    return LANE_Z[Math.abs(h) % LANE_Z.length];
+}
+
+function buildVehicleMesh(ev, vid) {
     const vc   = classifyLocal(ev);
     const spec = getSpec(vc);
     const geo  = spec.geo();
@@ -396,7 +403,7 @@ function buildVehicleMesh(ev) {
     // Snap to a road lane centre; keep x from GPS if available
     const p = (ev.latitude && ev.longitude) ? norm(ev.latitude, ev.longitude)
               : { x: (Math.random()-0.5)*400, z: 0 };
-    const laneZ = LANE_Z[vehicleMap.size % LANE_Z.length];
+    const laneZ = (vid != null) ? stableLane(vid) : LANE_Z[vehicleMap.size % LANE_Z.length];
     mesh.position.set(p.x, 0.35, laneZ);
 
     // Heading-based velocity: eastbound lanes (z<0) go +x, westbound (z>0) go -x
@@ -406,9 +413,13 @@ function buildVehicleMesh(ev) {
     const speedFactor = ((ev.speedMph ?? 55) * 0.018);
     const vx =  Math.sin(headingRad) * speedFactor;
     const vz = -Math.cos(headingRad) * speedFactor;
+    // Stable suspension phase per vehicle (hash of vid) so each vehicle bobs independently
+    var _ph = 0; if (vid) for (var _i = 0; _i < vid.length; _i++) _ph = (_ph*31+vid.charCodeAt(_i))|0;
+    const phase = (Math.abs(_ph) % 100) / 100 * Math.PI * 2;
 
     mesh.rotation.y = headingRad; // face the direction of travel
-    mesh.userData = { ev, vc, baseY: 0.35, idx: vehicleMeshes.length, vx, vz, laneZ };
+    mesh.userData = { ev, vc, baseY: 0.35, idx: vehicleMeshes.length,
+                      vx, vz, targetVx: vx, targetVz: vz, laneZ, headingRad, phase };
     return mesh;
 }
 
@@ -433,12 +444,13 @@ function loadEvents(events) {
             const headingDeg = ev.heading ?? (mesh.userData.laneZ < 0 ? 90 : 270);
             const headingRad = headingDeg * Math.PI / 180;
             const spd = ((ev.speedMph ?? 55) * 0.018);
-            mesh.userData.vx = Math.sin(headingRad) * spd;
-            mesh.userData.vz = -Math.cos(headingRad) * spd;
-            mesh.rotation.y  = headingRad;
+            mesh.userData.targetVx = Math.sin(headingRad) * spd;
+            mesh.userData.targetVz = -Math.cos(headingRad) * spd;
+            mesh.userData.speedMph = ev.speedMph ?? 55;
+            mesh.rotation.y        = headingRad;
         } else {
             // ── Add new vehicle mesh ──────────────────────────────────
-            const mesh = buildVehicleMesh(ev);
+            const mesh = buildVehicleMesh(ev, vid);
             scene.add(mesh);
             vehicleMeshes.push(mesh);
             vehicleMap.set(vid, mesh);
@@ -788,15 +800,24 @@ function animate() {
     camP.position.z = 120 + radius * 0.25 * Math.cos(theta * 0.3);
     camP.lookAt(60, 0, 0);
 
-    // Vehicle forward motion along the road
+    // Vehicle forward motion — smooth acceleration + suspension realism
     if (!animationPaused) {
         vehicleMeshes.forEach(m => {
-            const { vx, vz, laneZ, baseY } = m.userData;
-            m.position.x += vx;
-            // Keep vehicles locked to their lane's Z centre
-            m.position.z += (laneZ - m.position.z) * 0.06;
-            m.position.y  = baseY;
-            // Wrap around at road ends
+            const ud = m.userData;
+            // Smooth velocity interpolation (gradual speed transitions between DB refreshes)
+            ud.vx += (ud.targetVx - ud.vx) * 0.04;
+            ud.vz += (ud.targetVz - ud.vz) * 0.04;
+            // Slight traffic-flow jitter (±6% speed variation per vehicle)
+            const jitter = 1 + Math.sin(tick * 0.03 + ud.phase) * 0.06;
+            m.position.x += ud.vx * jitter;
+            // Lane keeping: soft Z correction so vehicles ease back to lane centre
+            m.position.z += (ud.laneZ - m.position.z) * 0.05;
+            // Suspension bounce: amplitude scales with speed (faster = bigger bumps)
+            const spd = Math.abs(ud.vx) + 0.01;
+            m.position.y = ud.baseY + Math.sin(tick * 0.22 + ud.phase) * spd * 0.14;
+            // Body roll: lean slightly into lane drift correction
+            m.rotation.z = (ud.laneZ - m.position.z) * 0.012;
+            // Wrap at road ends
             if (m.position.x >  ROAD_HALF) m.position.x = -ROAD_HALF;
             if (m.position.x < -ROAD_HALF) m.position.x =  ROAD_HALF;
         });

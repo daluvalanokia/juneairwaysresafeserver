@@ -466,6 +466,27 @@ camT.layers.enable(3);
 // ── Vehicle objects ───────────────────────────────────────────────────
 const vehicleObjects = [];
 const conflictRings  = [];
+
+// Persistent orbit state keyed by vehicleId — survives doRefresh() rebuilds
+const airVehicleState = new Map();
+function _getAirState(ev, vid) {
+    if (!airVehicleState.has(vid)) {
+        var h = 0;
+        for (var i = 0; i < vid.length; i++) h = (h * 31 + vid.charCodeAt(i)) | 0;
+        var orbitR = 25 + (Math.abs(h) % 6) * 15;           // 25–100 units, stable per vehicle
+        var initAng = (Math.abs(h >> 4) % 360) * Math.PI / 180;
+        var spd = Math.max(10, ev.speedMph ?? 70);
+        airVehicleState.set(vid, {
+            angle:  initAng,
+            orbitR: orbitR,
+            speed:  (spd * 0.022) / orbitR,                 // rad/frame at target speed
+            phase:  (Math.abs(h >> 8) % 100) / 100 * Math.PI * 2,
+        });
+    }
+    var st = airVehicleState.get(vid);
+    if (ev.speedMph) st.speed = (Math.max(10, ev.speedMph) * 0.022) / st.orbitR;
+    return st;
+}
 const raycaster = new THREE.Raycaster(), mouse2 = new THREE.Vector2();
 let selectedAirVehicle = null;
 
@@ -478,34 +499,40 @@ function buildVehicle(ev) {
     const col   = vc.conflictFlag ? '#ef4444' : (vc.color || sp.color);
     const c3    = new THREE.Color(col);
 
-    const p = (ev.latitude && ev.longitude)
-        ? norm(ev.latitude, ev.longitude)
-        : { x: (Math.random() - 0.5) * 160, z: (Math.random() - 0.5) * 160 };
+    // Air vehicles use persistent orbit state so position survives doRefresh() rebuilds
+    const vid = ev.vehicleId || ('AIR-' + (ev.id ?? Math.random().toString(36).slice(2,6)));
+    const st  = isAir ? _getAirState(ev, vid) : null;
+
+    const gpsPt = (ev.latitude && ev.longitude) ? norm(ev.latitude, ev.longitude)
+                : { x: (Math.random()-0.5)*160, z: (Math.random()-0.5)*160 };
+    const px  = isAir ? Math.sin(st.angle) * st.orbitR : gpsPt.x;
+    const pz  = isAir ? Math.cos(st.angle) * st.orbitR : gpsPt.z;
+    const p   = { x: px, z: pz };
 
     const ud = { ev, vc, baseY: altY };
 
     const meshP = new THREE.Mesh(sp.geoP(),
         new THREE.MeshPhongMaterial({ color: c3, side: THREE.DoubleSide }));
-    meshP.position.set(p.x, altY, p.z);
-    if (isAir) meshP.rotation.y = Math.random() * Math.PI * 2;
+    meshP.position.set(px, altY, pz);
+    if (isAir) meshP.rotation.y = st.angle + Math.PI * 0.5; // face direction of travel
     meshP.userData = ud;
     meshP.layers.set(1);
 
     const meshS = new THREE.Mesh(sp.geoS(),
         new THREE.MeshPhongMaterial({ color: c3, side: THREE.DoubleSide }));
-    meshS.position.set(p.x, altY, p.z);
+    meshS.position.set(px, altY, pz);
     meshS.rotation.y = Math.PI / 2;
     meshS.userData = ud;
     meshS.layers.set(2);
 
     const meshT = new THREE.Mesh(sp.geoT(),
         new THREE.MeshPhongMaterial({ color: c3, side: THREE.DoubleSide }));
-    meshT.position.set(p.x, topY, p.z);
+    meshT.position.set(px, topY, pz);
     meshT.rotation.x = -Math.PI / 2;
     meshT.userData = { ev, vc, baseY: topY };
     meshT.layers.set(3);
 
-    return { meshP, meshS, meshT, p, isAir, altY, topY, ev, vc };
+    return { meshP, meshS, meshT, p, isAir, altY, topY, ev, vc, st };
 }
 
 function buildSpeedOverlay(ev, p, isAir, altY) {
@@ -1065,27 +1092,43 @@ function animate() {
     camP.position.z = radius * Math.cos(theta) * Math.cos(phi);
     camP.lookAt(0, lookTarget.y, 0);
 
-    // Bug Fix 3 (partial): vehicle animation gated by animationPaused
+    // Vehicle animation — realistic flight circuits for air, gentle bob for ground
     if (!animationPaused) {
         vehicleObjects.forEach((vo, i) => {
-            if (vo.vc.domain === 'air') {
-                const dy = Math.sin(tick * 0.025 + i * 0.8) * 1.2;
-                vo.meshP.position.y = vo.altY + dy;
-                vo.meshS.position.y = vo.altY + dy;
-                vo.meshT.position.y = vo.topY + dy;
-                vo.meshP.rotation.y += 0.006;
-                vo.meshT.rotation.z += 0.006;
-                const oy = vo.topY + dy - 0.2;
-                vo.overlays.forEach(m => { m.position.y = oy; });
+            if (vo.vc.domain === 'air' && vo.st) {
+                // Advance orbit angle each frame — simulates circular flight circuit
+                vo.st.angle += vo.st.speed;
+                const ox   = Math.sin(vo.st.angle) * vo.st.orbitR;
+                const oz   = Math.cos(vo.st.angle) * vo.st.orbitR;
+                // Altitude oscillation: thermal lift + turbulence
+                const dy   = Math.sin(tick * 0.025 + vo.st.phase) * 1.2;
+                const curY = vo.altY + dy;
+                const tY   = vo.topY + dy;
+                // Move all three panel meshes in sync with orbit
+                vo.meshP.position.set(ox, curY, oz);
+                vo.meshS.position.set(ox, curY, oz);
+                vo.meshT.position.set(ox, tY,   oz);
+                // Face direction of travel + bank into turn
+                vo.meshP.rotation.y = vo.st.angle + Math.PI * 0.5;
+                vo.meshP.rotation.z = -0.22;        // realistic bank angle
+                // Top-down view: rotate to match heading
+                vo.meshT.rotation.z += vo.st.speed;
+                // Speed/alert overlays track aircraft XZ
+                vo.overlays.forEach(m => m.position.set(ox, curY - 0.2, oz));
             } else {
-                const dy = Math.sin(tick * 0.04 + i) * 0.05;
+                // Ground vehicle or no orbit state: gentle hovering bob
+                const dy = Math.sin(tick * 0.04 + i * 0.8) * 0.05;
                 vo.meshP.position.y = vo.altY + dy;
                 vo.meshS.position.y = vo.altY + dy;
                 vo.meshT.position.y = vo.topY + dy;
             }
         });
         conflictRings.forEach((r, i) => {
-            if (vehicleObjects[i]) r.position.y = vehicleObjects[i].meshP.position.y;
+            if (vehicleObjects[i]) {
+                r.position.x = vehicleObjects[i].meshP.position.x;
+                r.position.y = vehicleObjects[i].meshP.position.y;
+                r.position.z = vehicleObjects[i].meshP.position.z;
+            }
             r.rotation.z += 0.02;
         });
     }
