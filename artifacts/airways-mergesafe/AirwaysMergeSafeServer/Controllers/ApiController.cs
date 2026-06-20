@@ -256,4 +256,27 @@ public class ApiController : ControllerBase
         public double? Longitude      { get; set; }
         public double? AltitudeMeters { get; set; }
     }
+
+    // ── Input formats — read-only for vehicle client apps ─────────────────
+    /// <summary>
+    /// Returns InputFormatConfig rows.  Pass ?sourceType=automobile to get
+    /// automobile input format definitions the client can display.
+    /// </summary>
+    [HttpGet("input-formats")]
+    public async Task<IActionResult> InputFormats(string? sourceType)
+    {
+        if (!IsAuthorised()) return Unauthorized(new { error = "Authentication required." });
+        var query = _db.InputFormatConfigs.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(sourceType))
+            query = query.Where(f => f.SourceType == sourceType);
+        var formats = await query
+            .OrderBy(f => f.FormatName)
+            .Select(f => new
+            {
+                f.Id, f.FormatName, f.SourceId, f.SourceType,
+                f.DataInputType, f.InputSource, f.Description, f.EnabledFieldsRaw
+            })
+            .ToListAsync();
+        return Ok(formats);
+    }
 }

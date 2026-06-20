@@ -99,32 +99,38 @@ public class ServerSyncService : BackgroundService
 
     private async Task ReceiveAsync(ClientConfig cfg, CancellationToken ct)
     {
+        var retries = Math.Max(0, cfg.RetryCount);
         try
         {
             using var http = MakeClient(cfg);
-            var base_     = cfg.ServerBaseUrl.TrimEnd('/');
-            var hw        = Uri.EscapeDataString(cfg.HighwayId);
+            var base_ = cfg.ServerBaseUrl.TrimEnd('/');
+            var hw    = Uri.EscapeDataString(cfg.HighwayId);
 
-            var statsTask  = GetJson<StatsJson> ($"{base_}/api/stats?highwayId={hw}", http, ct);
-            var zonesTask  = GetJson<List<ZoneJson>> ($"{base_}/api/zones?highwayId={hw}", http, ct);
-            var eventsTask = GetJson<List<EventJson>>($"{base_}/api/events/live?highwayId={hw}&take={cfg.LiveEventsTake}&since={cfg.LiveEventsSinceMinutes}", http, ct);
-            var bandsTask  = GetJson<List<BandJson>> ($"{base_}/api/altitudebands?highwayId={hw}", http, ct);
+            var statsTask   = GetJsonRetry<StatsJson>        ($"{base_}/api/stats?highwayId={hw}",              http, retries, ct);
+            var zonesTask   = GetJsonRetry<List<ZoneJson>>   ($"{base_}/api/zones?highwayId={hw}",              http, retries, ct);
+            var eventsTask  = GetJsonRetry<List<EventJson>>  ($"{base_}/api/events/live?highwayId={hw}&take={cfg.LiveEventsTake}&since={cfg.LiveEventsSinceMinutes}", http, retries, ct);
+            var bandsTask   = GetJsonRetry<List<BandJson>>   ($"{base_}/api/altitudebands?highwayId={hw}",      http, retries, ct);
+            var formatsTask = GetJsonRetry<List<FmtJson>>    ($"{base_}/api/input-formats?sourceType=automobile", http, retries, ct);
 
-            await Task.WhenAll(statsTask, zonesTask, eventsTask, bandsTask);
+            await Task.WhenAll(statsTask, zonesTask, eventsTask, bandsTask, formatsTask);
 
-            var stats  = statsTask.Result;
-            var zones  = zonesTask.Result  ?? [];
-            var events = eventsTask.Result ?? [];
-            var bands  = bandsTask.Result  ?? [];
+            var stats   = statsTask.Result;
+            var zones   = zonesTask.Result   ?? [];
+            var events  = eventsTask.Result  ?? [];
+            var bands   = bandsTask.Result   ?? [];
+            var formats = formatsTask.Result ?? [];
 
             _cache.SetConnected(
                 stats is null ? null : new ServerStatsDto(stats.Zones, stats.Servers, stats.Sensors, stats.Events, stats.Ground, stats.Air),
-                zones.Select(z  => new ServerZoneDto(z.Id, z.ZoneName ?? "", z.ZoneId ?? "", z.HighwayId ?? "", z.Lat, z.Lon, z.RadiusM, z.ZoneType)).ToList(),
-                events.Select(e => new ServerEventDto(e.Id, e.EventType ?? "detection", e.ZoneId, e.HighwayId ?? "", e.VehicleId, e.SpeedMph, e.Latitude, e.Longitude, e.AltitudeMeters, e.VehicleMode ?? "ground", e.VehicleCategory ?? "sedan", e.IsAirFlyCar ?? "N", e.CreatedDate)).ToList(),
-                bands.Select(b  => new AltitudeBandDto(b.ServerId ?? "", b.ServerName ?? "", b.ZoneId, b.HighwayId ?? "", b.AltitudeMinMeters, b.AltitudeMaxMeters, b.AltitudeWidthMeters)).ToList()
+                zones.Select  (z => new ServerZoneDto(z.Id, z.ZoneName ?? "", z.ZoneId ?? "", z.HighwayId ?? "", z.Lat, z.Lon, z.RadiusM, z.ZoneType)).ToList(),
+                events.Select (e => new ServerEventDto(e.Id, e.EventType ?? "detection", e.ZoneId, e.HighwayId ?? "", e.VehicleId, e.SpeedMph, e.Latitude, e.Longitude, e.AltitudeMeters, e.VehicleMode ?? "ground", e.VehicleCategory ?? "sedan", e.IsAirFlyCar ?? "N", e.CreatedDate)).ToList(),
+                bands.Select  (b => new AltitudeBandDto(b.ServerId ?? "", b.ServerName ?? "", b.ZoneId, b.HighwayId ?? "", b.AltitudeMinMeters, b.AltitudeMaxMeters, b.AltitudeWidthMeters)).ToList()
+            );
+            _cache.SetAutomobileFormats(
+                formats.Select(f => new InputFormatDto(f.Id, f.FormatName ?? "", f.SourceId, f.SourceType ?? "", f.DataInputType ?? "", f.InputSource, f.Description, f.EnabledFieldsRaw)).ToList()
             );
 
-            _logger.LogInformation("ServerSync: polled — zones={Z} events={E}", zones.Count, events.Count);
+            _logger.LogInformation("ServerSync: polled — zones={Z} events={E} formats={F}", zones.Count, events.Count, formats.Count);
         }
         catch (Exception ex)
         {
@@ -137,6 +143,7 @@ public class ServerSyncService : BackgroundService
 
     private async Task SendPositionAsync(ClientConfig cfg, CancellationToken ct)
     {
+        var retries = Math.Max(0, cfg.RetryCount);
         try
         {
             using var http = MakeClient(cfg);
@@ -147,14 +154,34 @@ public class ServerSyncService : BackgroundService
                 vehicleId      = cfg.VehicleId,
                 deviceId       = cfg.DeviceId,
                 vehicleType    = cfg.AutoType,
+                isAirFlyCar    = cfg.IsAirFlyCar,
                 speedMph       = cfg.CurrentSpeedMph,
                 latitude       = cfg.CurrentLatitude,
                 longitude      = cfg.CurrentLongitude,
                 altitudeMeters = cfg.DefaultAltitudeMeters
             });
             var content = new StringContent(payload, Encoding.UTF8, "application/json");
-            var resp    = await http.PostAsync($"{cfg.ServerBaseUrl.TrimEnd('/')}/api/events/ingest", content, ct);
-            _logger.LogInformation("ServerSync: sent position — status={S}", resp.StatusCode);
+
+            HttpResponseMessage? resp = null;
+            for (int attempt = 0; attempt <= retries; attempt++)
+            {
+                try
+                {
+                    // Need a fresh content each retry (content is single-use after first read)
+                    var c = attempt == 0
+                        ? content
+                        : new StringContent(payload, Encoding.UTF8, "application/json");
+                    resp = await http.PostAsync($"{cfg.ServerBaseUrl.TrimEnd('/')}/api/events/ingest", c, ct);
+                    break;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch when (attempt < retries)
+                {
+                    await Task.Delay(1_000 * (attempt + 1), ct);
+                }
+            }
+            if (resp is not null)
+                _logger.LogInformation("ServerSync: sent position — status={S}", resp.StatusCode);
         }
         catch (Exception ex)
         {
@@ -172,12 +199,25 @@ public class ServerSyncService : BackgroundService
         return client;
     }
 
-    private async Task<T?> GetJson<T>(string url, HttpClient client, CancellationToken ct)
+    /// <summary>GET with up to <paramref name="retries"/> retries (linear 1 s backoff).</summary>
+    private async Task<T?> GetJsonRetry<T>(string url, HttpClient client, int retries, CancellationToken ct)
     {
-        var resp = await client.GetAsync(url, ct);
-        if (!resp.IsSuccessStatusCode) return default;
-        var body = await resp.Content.ReadAsStringAsync(ct);
-        return JsonSerializer.Deserialize<T>(body, _json);
+        for (int attempt = 0; attempt <= retries; attempt++)
+        {
+            try
+            {
+                var resp = await client.GetAsync(url, ct);
+                if (!resp.IsSuccessStatusCode) return default;
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                return JsonSerializer.Deserialize<T>(body, _json);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch when (attempt < retries)
+            {
+                await Task.Delay(1_000 * (attempt + 1), ct);
+            }
+        }
+        return default;
     }
 
     // ── Server JSON shapes ────────────────────────────────────────────────
@@ -205,5 +245,12 @@ public class ServerSyncService : BackgroundService
         public string? ServerId { get; set; } public string? ServerName { get; set; } public string? ZoneId { get; set; }
         public string? HighwayId { get; set; } public double? AltitudeMinMeters { get; set; }
         public double? AltitudeMaxMeters { get; set; } public double? AltitudeWidthMeters { get; set; }
+    }
+    private sealed class FmtJson
+    {
+        public int Id { get; set; } public string? FormatName { get; set; } public string? SourceId { get; set; }
+        public string? SourceType { get; set; } public string? DataInputType { get; set; }
+        public string? InputSource { get; set; } public string? Description { get; set; }
+        public string? EnabledFieldsRaw { get; set; }
     }
 }

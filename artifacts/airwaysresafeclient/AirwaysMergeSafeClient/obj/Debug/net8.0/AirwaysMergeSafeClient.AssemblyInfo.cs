@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AirwaysMergeSafeClient")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8dfd986a9c6e30c4cf805d6f45fdcd1588784c7c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+460d18a357bd181a1b06488802872dc5f76e369d")]
 [assembly: System.Reflection.AssemblyProductAttribute("AirwaysMergeSafeClient")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AirwaysMergeSafeClient")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

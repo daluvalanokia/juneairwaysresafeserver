@@ -190,13 +190,18 @@
             <input id="sim-interval" type="number" class="form-control form-control-sm bg-dark text-light border-secondary" value="2" min="1" max="30" />
         </div>
         <div class="col-auto d-flex align-items-end pb-1">
-            <div class="form-check form-switch">
+            <div class="form-check form-switch me-3">
                 <input class="form-check-input" type="checkbox" id="sim-airflycar" />
                 <label class="form-check-label small" for="sim-airflycar">AirFlyCar</label>
             </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sim-autopilot" checked />
+                <label class="form-check-label small" for="sim-autopilot">Autopilot</label>
+            </div>
         </div>
-        <div class="col-auto d-flex align-items-end">
-            <span id="sim-route-info" class="small text-muted">Click map to add waypoints</span>
+        <div class="col-auto d-flex align-items-end gap-1">
+            <button id="sim-next" class="btn btn-outline-info btn-sm" disabled title="Step once (Autopilot off)">▷ Step</button>
+            <span id="sim-route-info" class="small text-muted ms-1">Click map to add waypoints</span>
         </div>
     </div>
 
@@ -383,9 +388,25 @@ document.getElementById('sim-clear').addEventListener('click', () => {
 
 document.getElementById('sim-start').addEventListener('click', startSim);
 document.getElementById('sim-stop').addEventListener('click', stopSim);
+document.getElementById('sim-next').addEventListener('click', () => { if (simRunning) simStep(true); });
 
 document.getElementById('sim-speed').addEventListener('input', function() {
     document.getElementById('sim-speed-val').textContent = this.value;
+});
+
+document.getElementById('sim-autopilot').addEventListener('change', function() {
+    const nextBtn = document.getElementById('sim-next');
+    if (simRunning) {
+        if (this.checked) {
+            // Switch to autopilot: hide step button, start timer
+            nextBtn.disabled = true;
+            if (!simTimer) simStep();
+        } else {
+            // Switch to manual: clear timer, enable step button
+            if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+            nextBtn.disabled = false;
+        }
+    }
 });
 
 function startSim() {
@@ -393,6 +414,8 @@ function startSim() {
     simRunning = true;
     document.getElementById('sim-start').disabled = true;
     document.getElementById('sim-stop').disabled  = false;
+    const autopilot = document.getElementById('sim-autopilot').checked;
+    document.getElementById('sim-next').disabled = autopilot;
     simStep();
 }
 
@@ -401,14 +424,17 @@ function stopSim() {
     if (simTimer) { clearTimeout(simTimer); simTimer = null; }
     document.getElementById('sim-start').disabled = false;
     document.getElementById('sim-stop').disabled  = true;
+    document.getElementById('sim-next').disabled  = true;
 }
 
-function simStep() {
+// manualStep=true means the user clicked "Step" — do not schedule next timer
+function simStep(manualStep) {
     if (!simRunning) return;
-    const speed     = parseFloat(document.getElementById('sim-speed').value)    || 30;
-    const alt       = parseFloat(document.getElementById('sim-alt').value)       || 0;
-    const evtType   = document.getElementById('sim-event-type').value;
+    const speed       = parseFloat(document.getElementById('sim-speed').value)    || 30;
+    const alt         = parseFloat(document.getElementById('sim-alt').value)       || 0;
+    const evtType     = document.getElementById('sim-event-type').value;
     const isAirFlyCar = document.getElementById('sim-airflycar').checked ? 'Y' : 'N';
+    const autopilot   = document.getElementById('sim-autopilot').checked;
     const intervalMs  = (parseInt(document.getElementById('sim-interval').value) || 2) * 1000;
 
     const pos     = route[routeIndex % route.length];
@@ -433,7 +459,10 @@ function simStep() {
     .catch(err => appendLog({ok: false, error: err.message}));
 
     routeIndex = (routeIndex + 1) % route.length;
-    simTimer = setTimeout(simStep, intervalMs);
+
+    if (autopilot && !manualStep) {
+        simTimer = setTimeout(simStep, intervalMs);
+    }
 }
 
 function calcHeading(lat1, lng1, lat2, lng2) {

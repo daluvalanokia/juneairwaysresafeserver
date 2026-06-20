@@ -65,6 +65,7 @@ public class ApiController : Controller
             vehicleId      = cfg.VehicleId,
             deviceId       = cfg.DeviceId,
             vehicleType    = cfg.AutoType,
+            isAirFlyCar    = req.IsAirFlyCar ?? cfg.IsAirFlyCar,
             speedMph       = req.SpeedMph,
             latitude       = req.Latitude,
             longitude      = req.Longitude,
