@@ -2,21 +2,24 @@
 @{ ViewData["Title"] = "Data Input Formats"; ViewBag.Highways = null; }
 @{
     var tabDefs = new[]{
-        ("physical",  "Physical Sensors", "text-primary"),
-        ("satellite", "Satellite / GPS",  "text-success"),
-        ("telecom",   "Telecom / V2X",    "text-warning"),
-        ("tracker",   "Tag Trackers",     "text-purple"),
-    ("airflycar", "AirFlyCar",        "text-warning"),
+        ("physical",    "Physical Sensors",  "text-primary"),
+        ("satellite",   "Satellite / GPS",   "text-success"),
+        ("telecom",     "Telecom / V2X",     "text-warning"),
+        ("tracker",     "Tag Trackers",      "text-purple"),
+        ("automobile",  "Automobile / GPS",  "text-info"),
+        ("airflycar",   "AirFlyCar",         "text-pink"),
     };
-    var allConfigs   = Model.PhysicalConfigs.Concat(Model.SatelliteConfigs).Concat(Model.TelecomConfigs).Concat(Model.TrackerConfigs).Concat(Model.AirFlyCarConfigs).ToList();
+    var allConfigs   = Model.PhysicalConfigs.Concat(Model.SatelliteConfigs).Concat(Model.TelecomConfigs).Concat(Model.TrackerConfigs).Concat(Model.AutomobileConfigs).Concat(Model.AirFlyCarConfigs).ToList();
     var commonFields     = new[]{"vehicle_id","timestamp","speed_mph","latitude","longitude","altitude_m","altitude_ft","direction","heading","lane","vehicle_type","event_type","zone_id","highway_id","signal_strength","satellite_count","hdop","rsrp","rsrq","tag_id","read_count","isAirFlyCar"};
     var airflycarFields  = new[]{"flight_phase","vertical_rate_fpm","battery_soc","battery_temp_c","range_remaining_km","rotor_rpm","rotor_health","motor_temp_c","noise_db","corridor_id","corridor_deviation_m","conflict_flag","separation_m","passenger_count","destination_pad","pilot_id","icao_address","squawk","nic","nac_p"};
+    var automobileFields = new[]{"vin","make","model","year","odometer_km","engine_temp_c","fuel_level_pct","rpm","gear","throttle_pct","brake_pct","battery_voltage","abs_active","traction_control","obd_code","tire_pressure_fl","tire_pressure_fr","tire_pressure_rl","tire_pressure_rr"};
     var shown = Model.ActiveTab switch {
-        "satellite"  => Model.SatelliteConfigs,
-        "telecom"    => Model.TelecomConfigs,
-        "tracker"    => Model.TrackerConfigs,
-        "airflycar"  => Model.AirFlyCarConfigs,
-        _            => Model.PhysicalConfigs
+        "satellite"   => Model.SatelliteConfigs,
+        "telecom"     => Model.TelecomConfigs,
+        "tracker"     => Model.TrackerConfigs,
+        "automobile"  => Model.AutomobileConfigs,
+        "airflycar"   => Model.AirFlyCarConfigs,
+        _             => Model.PhysicalConfigs
     };
     var isSimTab = Model.ActiveTab == "simulation";
 }
@@ -88,6 +91,7 @@
                             <option value="satellite">Satellite / GPS</option>
                             <option value="telecom">Telecom / V2X</option>
                             <option value="tracker">Tag Tracker</option>
+                            <option value="automobile">🚗 Automobile / GPS</option>
                             <option value="airflycar">🛸 AirFlyCar / eVTOL</option>
                         </select>
                     </div>
@@ -302,7 +306,7 @@ else
 
     <script id="fmtData" type="application/json">
     @Html.Raw(System.Text.Json.JsonSerializer.Serialize(allConfigs.Select(c => new {
-        c.Id, c.SourceType, c.FormatName, c.SourceId, c.InputSource, c.Description,
+        c.Id, c.SourceType, c.DataInputType, c.FormatName, c.SourceId, c.InputSource, c.Description,
         enabledFields = c.EnabledFieldsRaw?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>()
     })))
     </script>
@@ -325,6 +329,18 @@ else
                         <select name="SourceType" id="fm_type" class="form-select">
                             @foreach (var (type, label, _) in tabDefs)
                             { <option value="@type">@label</option> }
+                        </select>
+                    </div>
+                    <div class="col-6"><label class="form-label small">Data Input Type</label>
+                        <select name="DataInputType" id="fm_dit" class="form-select">
+                            <option value="">— select —</option>
+                            <option value="physical">physical</option>
+                            <option value="sensors">sensors</option>
+                            <option value="satellite">satellite</option>
+                            <option value="telcom">telcom</option>
+                            <option value="tagtracker">tagtracker</option>
+                            <option value="automobile">automobile</option>
+                            <option value="airflycar">airflycar</option>
                         </select>
                     </div>
                     <div class="col-12"><label class="form-label small">Input Source (URL / stream)</label><input type="text" name="InputSource" id="fm_src" class="form-control" /></div>
@@ -353,6 +369,20 @@ else
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input fm-field" name="enabledFields" value="@f" id="ff_@f" />
                                 <label class="form-check-label small font-monospace" for="ff_@f">@f</label>
+                            </div>
+                        </div>
+                    }
+                    </div>
+                </div>
+                <div class="mb-3" id="autoFieldsSection" style="display:none">
+                    <label class="form-label small">🚗 Automobile / OBD-II Fields</label>
+                    <div class="row g-1 overflow-auto" style="max-height:9rem">
+                    @foreach (var f in automobileFields)
+                    {
+                        <div class="col-6 col-md-4">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input fm-field" name="enabledFields" value="@f" id="ffa_@f" />
+                                <label class="form-check-label small font-monospace" for="ffa_@f">@f</label>
                             </div>
                         </div>
                     }
@@ -498,7 +528,7 @@ function setSimStatus(state, msg) {
     document.getElementById('simStatusDot').style.background = colors[state] || '#475569';
 }
 
-var typeColors = { physical: '#3b82f6', satellite: '#22c55e', telecom: '#f59e0b', tracker: '#a855f7', airflycar: '#00bcd4' };
+var typeColors = { physical: '#3b82f6', satellite: '#22c55e', telecom: '#f59e0b', tracker: '#a855f7', automobile: '#06b6d4', airflycar: '#00bcd4' };
 
 function appendSimLog(payloadStr, label, srcType) {
     var clr = typeColors[srcType] || '#64748b';
@@ -585,7 +615,8 @@ else
 var fmts = JSON.parse(document.getElementById('fmtData').textContent);
 var antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
 document.getElementById('fm_type').addEventListener('change', function() {
-    document.getElementById('afcFieldsSection').style.display = this.value === 'airflycar' ? '' : 'none';
+    document.getElementById('afcFieldsSection').style.display  = this.value === 'airflycar'  ? '' : 'none';
+    document.getElementById('autoFieldsSection').style.display = this.value === 'automobile' ? '' : 'none';
 });
 
 function generateAjax(configId, btn) {
@@ -634,7 +665,9 @@ function openNew(tab) {
     document.getElementById('fm_id').value = 0;
     ['fm_name','fm_sid','fm_src','fm_desc'].forEach(function(id){ document.getElementById(id).value = ''; });
     document.getElementById('fm_type').value = tab;
-    document.getElementById('afcFieldsSection').style.display = tab === 'airflycar' ? '' : 'none';
+    document.getElementById('fm_dit').value  = tab;
+    document.getElementById('afcFieldsSection').style.display  = tab === 'airflycar'  ? '' : 'none';
+    document.getElementById('autoFieldsSection').style.display = tab === 'automobile' ? '' : 'none';
     document.querySelectorAll('.fm-field').forEach(function(cb){ cb.checked = false; });
     document.getElementById('customFields').innerHTML = '';
 }
@@ -643,10 +676,12 @@ function openEditFmt(id) {
     document.getElementById('fmtModalTitle').textContent = 'Edit Format Config';
     document.getElementById('fmtForm').action = '/DataInputFormats/Edit';
     document.getElementById('fm_id').value   = c.id;
-    document.getElementById('fm_name').value = c.formatName  || '';
-    document.getElementById('fm_sid').value  = c.sourceId    || '';
-    document.getElementById('fm_type').value = c.sourceType  || 'physical';
-    document.getElementById('afcFieldsSection').style.display = (c.sourceType === 'airflycar') ? '' : 'none';
+    document.getElementById('fm_name').value = c.formatName     || '';
+    document.getElementById('fm_sid').value  = c.sourceId       || '';
+    document.getElementById('fm_type').value = c.sourceType     || 'physical';
+    document.getElementById('fm_dit').value  = c.dataInputType  || '';
+    document.getElementById('afcFieldsSection').style.display  = (c.sourceType === 'airflycar')  ? '' : 'none';
+    document.getElementById('autoFieldsSection').style.display = (c.sourceType === 'automobile') ? '' : 'none';
     document.getElementById('fm_src').value  = c.inputSource || '';
     document.getElementById('fm_desc').value = c.description || '';
     document.querySelectorAll('.fm-field').forEach(function(cb){
@@ -703,7 +738,7 @@ function duplicateConfig(id, targetTab) {
     }).then(function(r){ return r.json(); })
       .then(function(d){
           if (d.ok) {
-              var labels = { physical: 'Physical Sensors', satellite: 'Satellite / GPS', telecom: 'Telecom / V2X', tracker: 'Tag Trackers' };
+              var labels = { physical: 'Physical Sensors', satellite: 'Satellite / GPS', telecom: 'Telecom / V2X', tracker: 'Tag Trackers', automobile: 'Automobile / GPS', airflycar: 'AirFlyCar' };
               alert('Duplicated "' + d.name + '" to ' + (labels[d.targetTab] || d.targetTab) + ' tab.');
               window.location.href = '/DataInputFormats?activeTab=' + d.targetTab;
           } else { alert('Duplicate failed: ' + (d.error || 'Unknown error')); }

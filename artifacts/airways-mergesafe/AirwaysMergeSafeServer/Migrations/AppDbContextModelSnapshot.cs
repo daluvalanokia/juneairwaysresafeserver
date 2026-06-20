@@ -56,6 +56,7 @@ namespace AirwaysMergeSafeServer.Migrations
                 b.Property<string>("InputSource").HasMaxLength(300).HasColumnType("TEXT");
                 b.Property<string>("SourceId").HasMaxLength(50).HasColumnType("TEXT");
                 b.Property<string>("SourceType").IsRequired().HasMaxLength(30).HasColumnType("TEXT");
+                b.Property<string>("DataInputType").IsRequired().HasMaxLength(30).HasColumnType("TEXT").HasDefaultValue("");
                 b.HasKey("Id");
                 b.HasIndex("SourceType");
                 b.ToTable("InputFormatConfigs");

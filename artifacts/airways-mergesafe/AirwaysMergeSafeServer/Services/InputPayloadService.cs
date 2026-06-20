@@ -56,6 +56,13 @@ public class InputPayloadService
             return _afc;
         }
 
+        if (string.Equals(sourceType, "automobile", StringComparison.OrdinalIgnoreCase))
+        {
+            var _auto = GenerateAutomobile(rng, fields);
+            TraceLogger.Exit("InputPayloadService", nameof(Generate), "automobile");
+            return _auto;
+        }
+
         // ── Existing source types (preserved) ────────────────────────────
         bool isAirSource  = sourceType is "satellite" or "tracker";
         bool isAirVehicle = isAirSource && rng.NextDouble() < 0.30;
@@ -221,6 +228,95 @@ public class InputPayloadService
                 "event_type"           => eventType,
                 "isAirFlyCar"          => "Y",   // always "Y" — this IS an AirFlyCar source
                 _                      => $"val_{rng.Next(100, 999)}"
+            };
+        }
+
+        return JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// Automobile / Connected-Vehicle payload generator.
+    /// Produces GPS + OBD-II telemetry for a ground vehicle, similar in structure
+    /// to the Satellite/GPS type but with car-specific fields.
+    /// </summary>
+    private static string GenerateAutomobile(Random rng, IEnumerable<string> fields)
+    {
+        var obj = new Dictionary<string, object?>();
+
+        // Ground vehicle — always near-zero altitude
+        double altM     = Math.Round(rng.NextDouble() * 3, 1);
+        string vType    = GroundTypes[rng.Next(GroundTypes.Length)];
+        double speedMph = rng.Next(0, 85);
+        double lat      = Math.Round(32.7767 + (rng.NextDouble() - 0.5) * 0.3, 6);
+        double lon      = Math.Round(-96.7970 + (rng.NextDouble() - 0.5) * 0.3, 6);
+
+        // OBD-II / connected-vehicle state
+        string[] makes   = { "Toyota", "Ford", "Chevrolet", "Honda", "Tesla", "BMW", "Hyundai" };
+        string[] models  = { "Camry", "F-150", "Silverado", "Accord", "Model 3", "3-Series", "Elantra" };
+        string[] gears   = { "P", "R", "N", "1", "2", "3", "4", "5", "6", "D" };
+        string   makeVal = makes[rng.Next(makes.Length)];
+        string   modelVal= models[rng.Next(models.Length)];
+        int      yearVal = rng.Next(2018, 2026);
+        double   odo     = Math.Round(rng.Next(0, 180000) + rng.NextDouble(), 1);
+        double   engTemp = Math.Round(70 + rng.NextDouble() * 35, 1);   // 70–105 °C normal
+        double   fuel    = Math.Round(5 + rng.NextDouble() * 95, 1);    // 5–100 %
+        int      rpm     = speedMph < 5 ? rng.Next(700, 900) : rng.Next(1000, 5500);
+        string   gear    = speedMph < 2 ? "P" : gears[rng.Next(2, gears.Length)];
+        double   throttle= Math.Round(rng.NextDouble() * 80, 1);
+        double   brake   = speedMph < 5 ? Math.Round(rng.NextDouble() * 40, 1) : 0;
+        double   battV   = Math.Round(12.0 + rng.NextDouble() * 2.8, 2);   // 12.0–14.8 V
+        int      absAct  = rng.NextDouble() < 0.05 ? 1 : 0;
+        int      tcAct   = rng.NextDouble() < 0.04 ? 1 : 0;
+        string   obd     = rng.NextDouble() < 0.07
+                            ? $"P{rng.Next(100, 3000):D4}"   // 7 % chance of fault code
+                            : "P0000";
+        double   tpFl    = Math.Round(30 + rng.NextDouble() * 6, 1);
+        double   tpFr    = Math.Round(30 + rng.NextDouble() * 6, 1);
+        double   tpRl    = Math.Round(30 + rng.NextDouble() * 6, 1);
+        double   tpRr    = Math.Round(30 + rng.NextDouble() * 6, 1);
+
+        foreach (var f in fields)
+        {
+            obj[f] = f switch
+            {
+                "vehicle_id"       => $"AUTO-{rng.Next(1000, 9999)}",
+                "timestamp"        => DateTime.UtcNow.ToString("o"),
+                "latitude"         => lat,
+                "longitude"        => lon,
+                "altitude_m"       => altM,
+                "altitude_ft"      => Math.Round(altM * 3.28084, 1),
+                "speed_mph"        => Math.Round(speedMph, 1),
+                "heading"          => rng.Next(0, 360),
+                "direction"        => rng.Next(0, 360),
+                "lane"             => rng.Next(1, 5),
+                "vehicle_type"     => vType,
+                "event_type"       => new[] { "detection","merge","speeding" }[rng.Next(3)],
+                "zone_id"          => $"ZONE-{rng.Next(1, 10):D3}",
+                "highway_id"       => "I20-TX",
+                "satellite_count"  => rng.Next(4, 16),
+                "hdop"             => Math.Round(rng.NextDouble() * 2.5, 2),
+                "isAirFlyCar"      => "N",
+                // Automobile-specific OBD-II / connected-vehicle fields
+                "vin"              => $"1HGBH41JXMN{rng.Next(100000, 999999)}",
+                "make"             => makeVal,
+                "model"            => modelVal,
+                "year"             => yearVal,
+                "odometer_km"      => odo,
+                "engine_temp_c"    => engTemp,
+                "fuel_level_pct"   => fuel,
+                "rpm"              => rpm,
+                "gear"             => gear,
+                "throttle_pct"     => throttle,
+                "brake_pct"        => brake,
+                "battery_voltage"  => battV,
+                "abs_active"       => absAct,
+                "traction_control" => tcAct,
+                "obd_code"         => obd,
+                "tire_pressure_fl" => tpFl,
+                "tire_pressure_fr" => tpFr,
+                "tire_pressure_rl" => tpRl,
+                "tire_pressure_rr" => tpRr,
+                _                  => $"val_{rng.Next(100, 999)}"
             };
         }
 

@@ -10,6 +10,7 @@ public class InputFormatConfig
     [Required, MaxLength(100)] public string FormatName { get; set; } = "";
     [MaxLength(50)]  public string? SourceId { get; set; }
     [MaxLength(30)]  public string SourceType { get; set; } = "physical";
+    [MaxLength(30)]  public string DataInputType { get; set; } = "";
     [MaxLength(300)] public string? InputSource { get; set; }
     [MaxLength(300)] public string? Description { get; set; }
     [MaxLength(1000)] public string? EnabledFieldsRaw { get; set; }

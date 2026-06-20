@@ -50,7 +50,8 @@ public class DataInputFormatsController : Controller
             SatelliteConfigs  = allConfigs.Where(c => c.SourceType == "satellite").ToList(),
             TelecomConfigs    = allConfigs.Where(c => c.SourceType == "telecom").ToList(),
             TrackerConfigs    = allConfigs.Where(c => c.SourceType == "tracker").ToList(),
-            AirFlyCarConfigs  = allConfigs.Where(c => c.SourceType == "airflycar").ToList(), // Phase 8
+            AirFlyCarConfigs  = allConfigs.Where(c => c.SourceType == "airflycar").ToList(),
+            AutomobileConfigs = allConfigs.Where(c => c.SourceType == "automobile").ToList(),
             SavedPayloads     = payloads,
             AllZones          = zones,
             AllSwitchServers  = srvs,
@@ -66,8 +67,9 @@ public class DataInputFormatsController : Controller
         string? highwayId, string? zoneId, string? serverId, string? sourceType)
     {
         var type          = sourceType ?? "physical";
-        var isAirFlyCarSrc = string.Equals(type, "airflycar", StringComparison.OrdinalIgnoreCase);
-        // Task 10: all formats carry isAirFlyCar explicitly (Y for airflycar source, N for others)
+        var isAirFlyCarSrc   = string.Equals(type, "airflycar",   StringComparison.OrdinalIgnoreCase);
+        var isAutomobileSrc  = string.Equals(type, "automobile",  StringComparison.OrdinalIgnoreCase);
+        // all formats carry isAirFlyCar explicitly (Y for airflycar source, N for others)
         var fields = isAirFlyCarSrc
             ? new[] {
                 "vehicle_id","timestamp","latitude","longitude","altitude_m","speed_mph","heading",
@@ -76,6 +78,16 @@ public class DataInputFormatsController : Controller
                 "corridor_id","corridor_deviation_m","conflict_flag","separation_m",
                 "passenger_count","destination_pad","pilot_id","icao_address","squawk",
                 "zone_id","highway_id","event_type","isAirFlyCar","nic","nac_p"
+              }
+            : isAutomobileSrc
+            ? new[] {
+                "vehicle_id","timestamp","latitude","longitude","altitude_m","speed_mph","heading",
+                "direction","lane","vehicle_type","event_type","zone_id","highway_id",
+                "satellite_count","hdop","isAirFlyCar",
+                "vin","make","model","year","odometer_km","engine_temp_c","fuel_level_pct",
+                "rpm","gear","throttle_pct","brake_pct","battery_voltage",
+                "abs_active","traction_control","obd_code",
+                "tire_pressure_fl","tire_pressure_fr","tire_pressure_rl","tire_pressure_rr"
               }
             : new[] {
                 "vehicle_id","timestamp","speed_mph","latitude","longitude",
@@ -243,7 +255,7 @@ public class DataInputFormatsController : Controller
     {
         var original = await _db.InputFormatConfigs.FindAsync(id);
         if (original == null) return Json(new { ok = false, error = "Config not found" });
-        var validTabs = new[] { "physical", "satellite", "telecom", "tracker", "airflycar" };
+        var validTabs = new[] { "physical", "satellite", "telecom", "tracker", "airflycar", "automobile" };
         if (!validTabs.Contains(targetTab)) return Json(new { ok = false, error = "Invalid target tab" });
 
         var copy = new InputFormatConfig

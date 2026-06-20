@@ -13,6 +13,7 @@ public class DataInputFormatsViewModel
     public List<InputFormatConfig> TelecomConfigs    { get; set; } = new();
     public List<InputFormatConfig> TrackerConfigs    { get; set; } = new();
     public List<InputFormatConfig> AirFlyCarConfigs  { get; set; } = new();  // Phase 8
+    public List<InputFormatConfig> AutomobileConfigs { get; set; } = new();
     public List<SamplePayload>     SavedPayloads     { get; set; } = new();
     public List<MergeZone>         AllZones          { get; set; } = new();
     public List<SwitchServer>      AllSwitchServers  { get; set; } = new();
