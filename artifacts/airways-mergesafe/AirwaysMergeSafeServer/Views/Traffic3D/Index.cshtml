@@ -74,6 +74,47 @@
     </div>
 </div>
 
+<!-- ── Sim Data Feed Panel ─────────────────────────────────────────────── -->
+<div id="simFeedPanel" style="background:rgba(5,12,5,.93);border:1px solid #1e4a1e;border-radius:6px;
+     font-family:monospace;font-size:12px;margin-bottom:6px;overflow:hidden">
+    <div onclick="toggleSimPanel()"
+         style="padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;user-select:none">
+        <span style="color:#4ade80;font-size:.7rem;font-weight:700;letter-spacing:.05em">📡 SIM FEED</span>
+        <span id="simFeedBadge" style="background:#dc2626;color:#fff;font-size:.6rem;font-weight:700;
+              padding:1px 6px;border-radius:9px;letter-spacing:.08em;display:none">● LIVE</span>
+        <span id="simFeedLine" style="color:#475569;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            No sim events yet — start the simulator on Data Input Formats.
+        </span>
+        <span id="simFeedToggle" style="color:#4ade80;font-size:.65rem;flex-shrink:0">▼</span>
+    </div>
+    <div id="simFeedBody" style="max-height:0;overflow:hidden;transition:max-height .25s ease">
+        <div style="padding:6px 12px 8px;border-top:1px solid #1e4a1e">
+            <table style="width:100%;font-size:.68rem;border-collapse:collapse">
+                <tr>
+                    <td style="color:#4ade80;padding:1px 8px 1px 0;width:18%">Vehicle ID</td>
+                    <td id="sfVehicleId" style="color:#d1fae5;width:30%">–</td>
+                    <td style="color:#4ade80;padding:1px 8px;width:12%">Type</td>
+                    <td id="sfType" style="color:#d1fae5">–</td>
+                </tr>
+                <tr>
+                    <td style="color:#4ade80;padding:1px 8px 1px 0">Speed</td>
+                    <td id="sfSpeed" style="color:#d1fae5">–</td>
+                    <td style="color:#4ade80;padding:1px 8px">Zone</td>
+                    <td id="sfZone" style="color:#d1fae5">–</td>
+                </tr>
+                <tr>
+                    <td style="color:#4ade80;padding:1px 8px 1px 0">Lat / Lon</td>
+                    <td id="sfLatLon" colspan="3" style="color:#d1fae5">–</td>
+                </tr>
+                <tr>
+                    <td style="color:#4ade80;padding:1px 8px 1px 0">DB Save</td>
+                    <td id="sfDbStatus" colspan="3" style="color:#fbbf24">–</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- ── Scene grid (split / single-panel modes) ────────────────────────── -->
 <div id="sceneWrap" style="position:relative;height:520px;background:#1a2f1a;border-radius:8px;overflow:hidden">
     <canvas id="mainCanvas" style="width:100%;height:100%"></canvas>
@@ -685,13 +726,53 @@ function toggleAnimation() {
     if (!animationPaused) refreshScene(); // returning to live mode → load fresh live data
 }
 
+// ── Sim Data Feed Panel JS ─────────────────────────────────────────────
+var _simPanelOpen = false;
+function toggleSimPanel() {
+    _simPanelOpen = !_simPanelOpen;
+    var body = document.getElementById('simFeedBody');
+    var tog  = document.getElementById('simFeedToggle');
+    if (body) body.style.maxHeight = _simPanelOpen ? '90px' : '0';
+    if (tog)  tog.textContent = _simPanelOpen ? '▲' : '▼';
+}
+function _updateSimPanel(ev, dbStatus) {
+    var t   = new Date().toLocaleTimeString('en-US', {hour12:false});
+    var spd = (ev.speedMph ?? 0).toFixed(1);
+    var lat = (ev.latitude  ?? 0).toFixed(4);
+    var lon = (ev.longitude ?? 0).toFixed(4);
+    var line = t + '  ·  ' + (ev.vehicleId||'?') + '  ·  '
+             + (ev.vehicleCategory || ev.vehicleMode || 'vehicle') + '  ·  ' + spd + ' mph';
+    var el = document.getElementById('simFeedLine');
+    if (el) { el.style.color = '#d1fae5'; el.textContent = line;
+              setTimeout(function(){ el.style.color = '#86efac'; }, 800); }
+    function setEl(id, val) { var x = document.getElementById(id); if (x) x.textContent = val || '–'; }
+    setEl('sfVehicleId', ev.vehicleId);
+    setEl('sfType',      ev.vehicleCategory || ev.vehicleMode || 'vehicle');
+    setEl('sfSpeed',     spd + ' mph');
+    setEl('sfZone',      ev.zoneId || '–');
+    setEl('sfLatLon',    lat + ', ' + lon);
+    if (dbStatus !== undefined) {
+        var dbEl = document.getElementById('sfDbStatus');
+        if (dbEl) { dbEl.textContent = dbStatus;
+                    dbEl.style.color = dbStatus.startsWith('✓') ? '#4ade80' : '#fbbf24'; }
+    }
+    if (!_simPanelOpen) toggleSimPanel();
+    var badge = document.getElementById('simFeedBadge');
+    if (badge) badge.style.display = '';
+}
+
 function onSimStateChange(isRunning) {
-    // Sim started → enter sim-only mode: pause live polling, accept sim injections
-    // Sim stopped → return to live mode: resume polling, block injections
     animationPaused = isRunning;
     var btn = document.getElementById('btnAnimToggle');
     if (btn) btn.textContent = isRunning ? '▶ Resume' : '⏸ Pause';
-    if (!isRunning) refreshScene(); // sim stopped → reload with fresh live data
+    var badge = document.getElementById('simFeedBadge');
+    if (badge) badge.style.display = isRunning ? '' : 'none';
+    if (!isRunning) {
+        refreshScene();
+        if (_simPanelOpen) toggleSimPanel();
+        var el = document.getElementById('simFeedLine');
+        if (el) { el.style.color = '#475569'; el.textContent = 'Sim stopped — viewing live data.'; }
+    }
 }
 
 // ── Animate loop ──────────────────────────────────────────────────────
@@ -785,31 +866,35 @@ function _simNorm(evObj, cl) {
 }
 
 function _simInject(evObj, cl) {
-    if (!animationPaused) return;  // blocked in live mode
     var ev = _simNorm(evObj, cl);
     var vc = classifyLocal(ev);
     if (vc.domain !== 'ground') return;
 
-    // ── Save to DB first, then refresh scene from DB ──────────────────
+    _updateSimPanel(ev, '⏳ saving…');
+
+    // ── Always save to DB + refresh (works in both live and sim-only modes) ──
     fetch('/api/sim/event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            vehicleId:     ev.vehicleId,
-            highwayId:     HW || '',
-            zoneId:        ev.zoneId || selectedZoneId || '',
-            vehicleType:   vc.category || null,
-            srcType:       'physical',
-            isAirFlyCar:   'N',
-            speedMph:      ev.speedMph,
-            latitude:      ev.latitude,
-            longitude:     ev.longitude,
+            vehicleId:      ev.vehicleId,
+            highwayId:      HW || '',
+            zoneId:         ev.zoneId || selectedZoneId || '',
+            vehicleType:    vc.category || null,
+            srcType:        'physical',
+            isAirFlyCar:    'N',
+            speedMph:       ev.speedMph,
+            latitude:       ev.latitude,
+            longitude:      ev.longitude,
             altitudeMeters: ev.altitudeMeters ?? 0
         })
-    }).then(function() {
-        refreshScene(); // pull updated list from DB
-    }).catch(function() {
-        // DB unavailable — inject directly so the scene still reacts
+    }).then(function(r) {
+        return r.json().then(function(j) {
+            if (r.ok) { _updateSimPanel(ev, '✓ saved · id ' + j.id); refreshScene(); }
+            else       { _updateSimPanel(ev, '✗ ' + (j.error || r.status)); }
+        });
+    }).catch(function(err) {
+        _updateSimPanel(ev, '✗ ' + (err.message || 'network error'));
         var mesh = buildVehicleMesh(ev);
         scene.add(mesh);
         vehicleMeshes.push(mesh);
@@ -817,10 +902,10 @@ function _simInject(evObj, cl) {
         document.getElementById('statGround').textContent = vehicleMap.size;
     });
 
-    // Flash label + camera tween immediately (before DB round-trip)
     var lbl = document.getElementById('simLiveLabel');
     if (lbl) { lbl.style.opacity = '1'; setTimeout(function(){ lbl.style.opacity = '0'; }, 2500); }
 
+    if (!animationPaused) return; // camera tween only in sim-only mode
     var startR = radius, startP = phi;
     var targR  = Math.max(18, startR * 0.12);
     var targP  = Math.max(0.15, Math.min(0.55, startP));
