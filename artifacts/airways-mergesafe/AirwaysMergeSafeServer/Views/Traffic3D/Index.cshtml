@@ -471,23 +471,24 @@ document.getElementById('viewToggle').querySelectorAll('button').forEach(btn => 
     });
 });
 
-// ── Bug Fix 1: Pause/Resume animation ────────────────────────────────
+// ── Feed-mode Pause/Resume (full implementation) ───────────────────
+// Pausing halts 30-second polling AND live sim injection (feed-mode control).
+// onSimStateChange drives state from BroadcastChannel/storage lifecycle events.
+// Page-load syncs from localStorage so navigating back from DataInputFormats works.
 let animationPaused = false;
 
 function toggleAnimation() {
     animationPaused = !animationPaused;
     var btn = document.getElementById('btnAnimToggle');
     if (btn) btn.textContent = animationPaused ? '▶ Resume' : '⏸ Pause';
+    if (!animationPaused) refreshScene(); // immediate refresh when unpausing
 }
 
 function onSimStateChange(isRunning) {
+    animationPaused = !isRunning;
     var btn = document.getElementById('btnAnimToggle');
-    if (!btn) return;
-    // Auto-resume when a sim starts so vehicles visibly animate
-    if (isRunning && animationPaused) {
-        animationPaused = false;
-        btn.textContent = '⏸ Pause';
-    }
+    if (btn) btn.textContent = isRunning ? '⏸ Pause' : '▶ Resume';
+    if (isRunning) refreshScene();
 }
 
 // ── Animate loop ──────────────────────────────────────────────────────
@@ -565,6 +566,7 @@ function _simNorm(evObj, cl) {
 }
 
 function _simInject(evObj, cl) {
+    if (animationPaused) return;   // Feed mode: don't inject when paused
     var ev = _simNorm(evObj, cl);
     var vc = classifyLocal(ev);
     if (vc.domain !== 'ground') return;   // ground-only view
@@ -634,4 +636,6 @@ window.addEventListener('storage', function(e) {
             _simInject(msg.payload, msg.classification);
     } catch(ex) {}
 });
+// Restore sim feed state from localStorage on page load (handles DataInputFormats navigation)
+(function() { if (localStorage.getItem('airways_sim_active') === 'true') onSimStateChange(true); })();
 </script>

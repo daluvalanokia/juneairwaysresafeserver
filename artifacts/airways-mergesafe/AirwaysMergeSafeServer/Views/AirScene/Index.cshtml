@@ -80,12 +80,6 @@
                 <option value="@s.ServerId" data-zone="@(s.ZoneId ?? "")">@s.ServerName</option>
             }
         </select>
-        <!-- Domain filter -->
-        <div class="btn-group btn-group-sm" id="domFilter">
-            <button class="btn btn-secondary active"   data-dom="all">All</button>
-            <button class="btn btn-outline-info"       data-dom="ground">🚗 Gnd</button>
-            <button class="btn btn-outline-warning"    data-dom="air">✈ Air</button>
-        </div>
         <a href="/Traffic3D" class="btn btn-sm btn-outline-secondary">⬡ Traffic3D</a>
         <!-- Bug Fix 1: Pause/Resume button (ported from MergeSafeServer original) -->
         <button id="btnAnimToggle" class="btn btn-sm btn-outline-warning" onclick="toggleAnimation()">⏸ Pause</button>
@@ -125,8 +119,8 @@
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <h6 class="mb-0">📐 Altitude Band Corridors</h6>
                     <div class="d-flex gap-3 small text-muted">
-                        <span>Ground: <b id="stGround">@Model.GroundCount</b></span>
                         <span>Air: <b id="stAir">@Model.AirCount</b></span>
+                        <span>AirFlyCar: <b>@Model.GroundCount</b></span>
                         <span>Zones: <b>@Model.Zones.Count</b></span>
                         <span>Corridors: <b id="stBands">–</b></span>
                         <span class="text-muted" id="stTime"></span>
@@ -143,18 +137,17 @@
                 <h6 class="mb-1">🔑 Vehicle Categories</h6>
                 <div class="d-flex flex-wrap gap-1">
                     @{
+                        // AirScene is air-only — ground vehicle categories not shown here
                         var cats = new[]{
-                            ("sedan","#3b82f6","🚗"),("suv","#22c55e","🚙"),
-                            ("truck","#f59e0b","🛻"),("motorcycle","#a855f7","🏍"),("van","#64748b","🚐"),
-                            ("air_urban","#00bcd4","✈"),("air_express","#ff6b35","🛩"),
+                            ("air_urban",  "#00bcd4", "✈"),
+                            ("air_express","#ff6b35", "🛩"),
                         };
                     }
                     @foreach (var (cat, col, icon) in cats)
                     {
                         var cnt = Model.CategoryBreakdown.TryGetValue(cat, out var c) ? c : 0;
-                        var dark = cat is "truck" or "air_urban";
                         <span class="badge rounded-pill px-3 py-1"
-                              style="background:@col;color:@(dark?"#000":"#fff");font-size:.65rem">
+                              style="background:@col;color:#fff;font-size:.65rem">
                             @icon @cat@(cnt > 0 ? $" ({cnt})" : "")
                         </span>
                     }
@@ -282,6 +275,7 @@ function airZoomToVehicles(matchFn) {
 function bandHsl(i) { return `hsl(${(i * 137.508) % 360}, 68%, 55%)`; }
 function bandColor(i) { return new THREE.Color(bandHsl(i)); }
 
+// Air Scene is air-only — ground vehicle categories are NOT rendered here.
 const CAT = {
     air_urban:   { color:'#00bcd4', icon:'✈',  domain:'air',
         geoP: ()=>new THREE.ConeGeometry(0.55, 0.9, 6),
@@ -291,50 +285,28 @@ const CAT = {
         geoP: ()=>new THREE.OctahedronGeometry(0.65),
         geoT: ()=>{ const g=new THREE.CircleGeometry(0.7,4); g.rotateZ(Math.PI/4); return g; },
         geoS: ()=>new THREE.CircleGeometry(0.55, 4) },
-    sedan:       { color:'#3b82f6', icon:'🚗', domain:'ground',
-        geoP: ()=>new THREE.BoxGeometry(1.6,0.40,0.8),
-        geoT: ()=>new THREE.PlaneGeometry(1.6,0.8),
-        geoS: ()=>new THREE.PlaneGeometry(1.6,0.40) },
-    suv:         { color:'#22c55e', icon:'🚙', domain:'ground',
-        geoP: ()=>new THREE.BoxGeometry(1.9,0.55,0.9),
-        geoT: ()=>new THREE.PlaneGeometry(1.9,0.9),
-        geoS: ()=>new THREE.PlaneGeometry(1.9,0.55) },
-    truck:       { color:'#f59e0b', icon:'🛻', domain:'ground',
-        geoP: ()=>new THREE.BoxGeometry(2.4,0.75,0.95),
-        geoT: ()=>new THREE.PlaneGeometry(2.4,0.95),
-        geoS: ()=>new THREE.PlaneGeometry(2.4,0.75) },
-    motorcycle:  { color:'#a855f7', icon:'🏍', domain:'ground',
-        geoP: ()=>new THREE.CylinderGeometry(0.15,0.15,0.5,8),
-        geoT: ()=>new THREE.CircleGeometry(0.25,8),
-        geoS: ()=>new THREE.PlaneGeometry(0.5,0.5) },
-    van:         { color:'#64748b', icon:'🚐', domain:'ground',
-        geoP: ()=>new THREE.BoxGeometry(2.1,1.0,1.0),
-        geoT: ()=>new THREE.PlaneGeometry(2.1,1.0),
-        geoS: ()=>new THREE.PlaneGeometry(2.1,1.0) },
 };
-const CAT_DEFAULT = CAT.sedan;
+const CAT_DEFAULT = CAT.air_urban;
 function getSpec(cat) { return CAT[cat] || CAT_DEFAULT; }
 
+// AirScene: all events are air-domain. No ground fallback — controller pre-filters.
 function resolveClass(ev) {
     if (ev.vehicleClassJson) {
         try {
             const vc = typeof ev.vehicleClassJson === 'string'
                 ? JSON.parse(ev.vehicleClassJson) : ev.vehicleClassJson;
-            if (vc && vc.category) return vc;
+            if (vc && vc.category && (vc.domain === 'air' || ev.isAirFlyCar === 'Y'))
+                return { ...vc, domain: 'air' };
         } catch(e) {}
     }
-    if (ev.vehicleCategory && ev.vehicleMode)
-        return { category: ev.vehicleCategory, domain: ev.vehicleMode,
-                 color: CAT[ev.vehicleCategory]?.color || '#3b82f6', confidence: 0.75 };
-    // IsAirFlyCar flag — treat as air_urban if set
+    // IsAirFlyCar="Y" takes precedence
     if (ev.isAirFlyCar === 'Y')
         return { category: 'air_urban', domain: 'air', color: '#00bcd4', confidence: 0.85 };
+    // Classify by altitude (all events here are air-domain)
     const alt = ev.altitudeMeters;
-    if (alt != null && alt > 10)
-        return { category: alt <= 150 ? 'air_urban' : 'air_express', domain: 'air',
-                 color: alt <= 150 ? '#00bcd4' : '#ff6b35', confidence: 0.5 };
-    const cat = 'sedan';
-    return { category: cat, domain: 'ground', color: CAT[cat].color, confidence: 0.3 };
+    if (alt != null && alt > 150)
+        return { category: 'air_express', domain: 'air', color: '#ff6b35', confidence: 0.65 };
+    return { category: 'air_urban', domain: 'air', color: '#00bcd4', confidence: 0.5 };
 }
 
 function findBand(altM) {
@@ -454,7 +426,6 @@ camT.layers.enable(3);
 const vehicleObjects = [];
 const conflictRings  = [];
 const raycaster = new THREE.Raycaster(), mouse2 = new THREE.Vector2();
-let activeDomFilter = 'all';
 let selectedAirVehicle = null;
 
 function buildVehicle(ev) {
@@ -615,15 +586,14 @@ function loadEvents(evs) {
         midLon = lons.reduce((a,b) => a + b, 0) / lons.length;
     }
 
-    let stG = 0, stA = 0;
+    // Air Scene: controller already filtered to air-only — all events rendered as air
+    let stA = 0;
     evs.forEach(ev => {
         const vc = resolveClass(ev);
-        if (activeDomFilter === 'ground' && vc.domain !== 'ground') return;
-        if (activeDomFilter === 'air'    && vc.domain !== 'air')    return;
 
-        const vo      = buildVehicle(ev);
+        const vo       = buildVehicle(ev);
         const overlays = buildSpeedOverlay(ev, vo.p, vo.isAir, vo.altY);
-        vo.overlays = overlays;
+        vo.overlays    = overlays;
 
         scene.add(vo.meshP);
         scene.add(vo.meshS);
@@ -635,12 +605,11 @@ function loadEvents(evs) {
             const ring = buildConflictRing(vo.meshP.position);
             scene.add(ring); conflictRings.push(ring);
         }
-        if (vc.domain === 'air') stA++; else stG++;
+        stA++;
     });
 
-    document.getElementById('stGround').textContent = stG;
-    document.getElementById('stAir').textContent    = stA;
-    document.getElementById('stTime').textContent   = 'Updated ' + new Date().toLocaleTimeString();
+    document.getElementById('stAir').textContent  = stA;
+    document.getElementById('stTime').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 async function doRefresh() {
@@ -940,22 +909,6 @@ canvas.addEventListener('wheel', e => {
     radius = Math.max(60, Math.min(900, radius + e.deltaY * 0.25));
 });
 
-// ── Domain filter ─────────────────────────────────────────────────────
-document.getElementById('domFilter').querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('#domFilter button').forEach(b => {
-            b.classList.remove('active','btn-secondary','btn-info','btn-warning');
-            const d = b.dataset.dom;
-            b.classList.add(d==='ground'?'btn-outline-info':d==='air'?'btn-outline-warning':'btn-outline-secondary');
-        });
-        btn.classList.add('active');
-        btn.classList.remove('btn-outline-secondary','btn-outline-info','btn-outline-warning');
-        btn.classList.add(btn.dataset.dom==='ground'?'btn-info':btn.dataset.dom==='air'?'btn-warning':'btn-secondary');
-        activeDomFilter = btn.dataset.dom;
-        doRefresh();
-    });
-});
-
 // ── Band legend ───────────────────────────────────────────────────────
 function renderBandLegend() {
     const el = document.getElementById('bandLegend');
@@ -993,7 +946,10 @@ function renderAltAxis() {
     }).join('');
 }
 
-// ── Bug Fix 1: Pause/Resume animation (ported from MergeSafeServer original)
+// ── Feed-mode Pause/Resume (Fix 1: full implementation) ───────────────
+// Pausing stops live data injection AND 30-second polling (feed-mode control).
+// onSimStateChange handles both sim-started and sim-stopped lifecycle events.
+// Initial state is synced from localStorage on page load.
 let tick = 0;
 let animationPaused = false;
 
@@ -1001,15 +957,15 @@ function toggleAnimation() {
     animationPaused = !animationPaused;
     var btn = document.getElementById('btnAnimToggle');
     if (btn) btn.textContent = animationPaused ? '▶ Resume' : '⏸ Pause';
+    if (!animationPaused) doRefresh(); // immediate live refresh when unpausing
 }
 
 function onSimStateChange(isRunning) {
+    // Sim started → unpause feed so vehicles stream in; sim stopped → auto-pause
+    animationPaused = !isRunning;
     var btn = document.getElementById('btnAnimToggle');
-    if (!btn) return;
-    if (isRunning && animationPaused) {
-        animationPaused = false;
-        btn.textContent = '⏸ Pause';
-    }
+    if (btn) btn.textContent = isRunning ? '⏸ Pause' : '▶ Resume';
+    if (isRunning) doRefresh();
 }
 
 // ── Animate loop ──────────────────────────────────────────────────────
@@ -1077,9 +1033,11 @@ function animate() {
     animate();
 })();
 
-// Bug Fix 3: Gate 30-second auto-refresh when animation is paused
+// Fix 3: Gate 30-second auto-refresh when animation is paused
 setInterval(function() { if (!animationPaused) doRefresh(); }, 30000);
 window.addEventListener('resize', renderAltAxis);
+// Restore sim feed state from localStorage on page load (handles DataInputFormats navigation)
+(function() { if (localStorage.getItem('airways_sim_active') === 'true') onSimStateChange(true); })();
 
 // ── Live simulation feed ───────────────────────────────────────────────
 function _airNorm(evObj, cl) {
@@ -1103,10 +1061,10 @@ function _airNorm(evObj, cl) {
 }
 
 function _airInject(evObj, cl) {
+    if (animationPaused) return;   // Feed mode: don't inject when paused
+
     var ev = _airNorm(evObj, cl);
-    var vc = resolveClass(ev);
-    if (activeDomFilter === 'ground' && vc.domain !== 'ground') return;
-    if (activeDomFilter === 'air'    && vc.domain !== 'air')    return;
+    var vc = resolveClass(ev);     // always returns air-domain in AirScene
 
     var vo       = buildVehicle(ev);
     var overlays = buildSpeedOverlay(ev, vo.p, vo.isAir, vo.altY);
@@ -1115,10 +1073,8 @@ function _airInject(evObj, cl) {
     overlays.forEach(function(m){ scene.add(m); });
     vehicleObjects.push(vo);
 
-    var gEl = document.getElementById('stGround');
     var aEl = document.getElementById('stAir');
-    if (vc.domain === 'air') aEl.textContent = (+aEl.textContent||0) + 1;
-    else                     gEl.textContent = (+gEl.textContent||0) + 1;
+    aEl.textContent = (+aEl.textContent||0) + 1;
     document.getElementById('stTime').textContent = 'Sim · ' + new Date().toLocaleTimeString();
 
     var lbl = document.getElementById('airSimLiveLabel');

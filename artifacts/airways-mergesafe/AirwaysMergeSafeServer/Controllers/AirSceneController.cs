@@ -38,8 +38,10 @@ public class AirSceneController : Controller
                           .Where(s => s.ZoneId != null && zoneIds.Contains(s.ZoneId))
                           .OrderBy(s => s.ZoneId).ThenBy(s => s.ServerName).ToListAsync();
 
+        // Task 10: air-only query — VehicleMode="air" OR IsAirFlyCar="Y"
         var recentEvents = await _db.VehicleEvents.AsNoTracking()
-            .Where(e => e.HighwayId == highwayId)
+            .Where(e => e.HighwayId == highwayId
+                     && (e.VehicleMode == "air" || e.IsAirFlyCar == "Y"))
             .OrderByDescending(e => e.CreatedDate)
             .Take(120)
             .Select(e => new {

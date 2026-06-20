@@ -43,21 +43,23 @@ public class Traffic3DController : Controller
             .Where(s => s.ZoneId != null && zoneIds.Contains(s.ZoneId))
             .OrderBy(s => s.ZoneId).ThenBy(s => s.ServerName).ToListAsync();
 
-        // P6: recent events with classification data for scene bootstrap
+        // Task 10: ground-only query — excludes air vehicles and IsAirFlyCar="Y"
         var recentEvents = await _db.VehicleEvents.AsNoTracking()
-            .Where(e => e.HighwayId == highwayId)
+            .Where(e => e.HighwayId == highwayId
+                     && e.VehicleMode == "ground"
+                     && e.IsAirFlyCar != "Y")
             .OrderByDescending(e => e.CreatedDate)
             .Take(80)
             .Select(e => new {
                 e.Id, e.VehicleId, e.EventType, e.ZoneId,
                 e.SpeedMph, e.Latitude, e.Longitude, e.AltitudeMeters,
                 e.VehicleMode, e.VehicleCategory, e.VehicleClassJson,
-                e.CreatedDate
+                e.IsAirFlyCar, e.CreatedDate
             })
             .ToListAsync();
 
-        var groundCount = recentEvents.Count(e => e.VehicleMode == "ground");
-        var airCount    = recentEvents.Count(e => e.VehicleMode == "air");
+        var groundCount = recentEvents.Count;
+        var airCount    = 0; // air vehicles are in AirScene (/AirScene)
 
         return View(new Traffic3DViewModel
         {
