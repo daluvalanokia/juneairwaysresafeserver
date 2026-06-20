@@ -141,11 +141,17 @@ try
                 // VehicleEvents classification indexes
                 "CREATE INDEX IF NOT EXISTS \"IX_VehicleEvents_VehicleMode\"     ON \"VehicleEvents\" (\"VehicleMode\")",
                 "CREATE INDEX IF NOT EXISTS \"IX_VehicleEvents_VehicleCategory\"  ON \"VehicleEvents\" (\"VehicleCategory\")",
+                // IsAirFlyCar flag (20260621000000_AddIsAirFlyCar)
+                "ALTER TABLE \"VehicleEvents\" ADD COLUMN IF NOT EXISTS \"IsAirFlyCar\" VARCHAR(1) NOT NULL DEFAULT 'N'",
+                // Automobile source type + DataInputType field (20260622000000_AddAutomobileAndDataInputType)
+                "ALTER TABLE \"InputFormatConfigs\" ADD COLUMN IF NOT EXISTS \"DataInputType\" VARCHAR(30) NOT NULL DEFAULT ''",
                 // Mark new migrations as applied so MigrateAsync skips them next run
                 "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('20260619000000_AddAirFlyCarSourceType', '8.0.0') ON CONFLICT DO NOTHING",
                 "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('20260620000000_AddAltitudeFields', '8.0.0') ON CONFLICT DO NOTHING",
                 "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('20260620000001_AddAuditLog', '8.0.0') ON CONFLICT DO NOTHING",
                 "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('20260620000002_AddVehicleClassification', '8.0.0') ON CONFLICT DO NOTHING",
+                "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('20260621000000_AddIsAirFlyCar', '8.0.0') ON CONFLICT DO NOTHING",
+                "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ('20260622000000_AddAutomobileAndDataInputType', '8.0.0') ON CONFLICT DO NOTHING",
             };
             foreach (var sql in guards)
             {
